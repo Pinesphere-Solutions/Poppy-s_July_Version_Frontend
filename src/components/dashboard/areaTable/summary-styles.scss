@@ -1,0 +1,248 @@
+/* Summary section styles */
+.summary-section {
+  background: #fff;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 30px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  animation: fadeIn 0.3s ease-in-out;
+  
+  h4 {
+    margin-bottom: 20px;
+    color: #2c3e50;
+    font-weight: 600;
+    font-size: 1.4rem;
+  }
+  
+  .summary-content {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    margin-bottom: 30px;
+    
+    .summary-chart {
+      width: 300px;
+      height: 300px;
+      margin: 0 auto 20px;
+    }
+    
+    .hour-breakdown {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+      max-width: 600px;
+      
+      .hour-box {
+        display: flex;
+        align-items: center;
+        padding: 8px 15px;
+        background-color: #f9f9f9;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        
+        .dot {
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          margin-right: 10px;
+            &.production {
+            background-color: #3E3561;
+            border: 1px solid #3E3561;
+          }
+          
+          &.idle {
+            background-color: #F8A723;
+            border: 1px solid #F8A723;
+          }
+          
+          &.meeting {
+            background-color: #E74C3C;
+            border: 1px solid #E74C3C;
+          }
+          
+          &.no-feeding {
+            background-color: #8E44AD;
+            border: 1px solid #8E44AD;
+          }
+          
+          &.maintenance {
+            background-color: #118374;
+            border: 1px solid #118374;
+          }
+        }
+        
+        p {
+          margin: 0;
+          font-size: 0.9rem;
+          font-weight: 500;
+        }
+      }
+    }
+  }
+  
+  .summary-table-wrapper {
+    overflow-x: auto;
+    
+    .summary-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      
+      th, td {
+        border: 1px solid #e0e0e0;
+        padding: 12px 15px;
+        text-align: left;
+      }
+      
+      th {
+        background-color: #f5f5f5;
+        font-weight: 600;
+        color: #333;
+      }
+      
+      tr:hover {
+        background-color: #f9f9f9;
+      }
+    }
+  }
+}
+
+/* Button styles for toggling summary view */
+.view-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 18px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+  
+  svg {
+    margin-right: 8px;
+    font-size: 1.1rem;
+  }
+  
+  &:hover {
+    background-color: #45a049;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transform: translateY(-1px);
+  }
+  
+  &:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  }
+  
+  &:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+}
+
+.green-button {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.view-toggle-button.active {
+  background-color: #e74c3c;
+  color: white;
+  
+  &:hover {
+    background-color: #c0392b;
+  }
+}
+
+.button-group {
+  display: flex;
+  align-items: center;
+}
+
+/* Results header style enhancements */
+.results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  
+  .results-header-left {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    
+    h4 {
+      margin: 0;
+      min-width: 200px;
+    }
+  }
+}
+
+.view-mode-indicator {
+  padding: 6px 12px;
+  background-color: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: #555;
+  margin-right: 15px;
+  
+  span {
+    display: flex;
+    align-items: center;
+    
+    &::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #4CAF50;
+      margin-right: 8px;
+    }
+  }
+}
+
+/* Animation for view transitions */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Add animation to table container as well */
+.table-container {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .summary-content {
+    flex-direction: column;
+    
+    .summary-chart {
+      width: 100%;
+      max-width: 350px;
+      height: auto;
+    }
+  }
+  
+  .hour-breakdown {
+    .hour-box {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+  }
+}
