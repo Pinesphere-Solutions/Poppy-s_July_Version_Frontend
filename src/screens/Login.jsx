@@ -48,7 +48,7 @@ const Login = () => {
       }
 
       // API login for other users
-      const response = await fetch("http://localhost:8000/api/user_login/", {
+      const response = await fetch("https://oceanatlantic.pinesphere.co.in/api/user_login/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

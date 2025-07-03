@@ -45,8 +45,8 @@ const formatDateTime = (dateTimeString) => {
   }
 };
 
-const PRIMARY_API_URL = "http://localhost:8000/api/get_consolidated_user_AFL_logs/";
-const FALLBACK_API_URL = "http://localhost:8000/api/user-machine-logs/";
+const PRIMARY_API_URL = "https://oceanatlantic.pinesphere.co.in/api/get_consolidated_user_AFL_logs/";
+const FALLBACK_API_URL = "https://oceanatlantic.pinesphere.co.in/api/user-machine-logs/";
 
 const AReport = () => {
   const [tableData, setTableData] = useState([]);

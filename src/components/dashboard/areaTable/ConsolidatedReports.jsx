@@ -10,6 +10,7 @@ import {
   FaAngleDoubleLeft,
   FaAngleDoubleRight,
   FaChartBar,
+  FaCalendarAlt,
 } from "react-icons/fa";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
@@ -56,7 +57,7 @@ const formatDateTime = (dateTimeString) => {
   }
 };
 
-const API_URL = "http://localhost:8000/api/get_consolidated_logs/";
+const API_URL = "https://oceanatlantic.pinesphere.co.in/api/get_consolidated_logs/";
 
 const ConsolidatedReports = () => {
   const [tableData, setTableData] = useState([]);
@@ -98,6 +99,7 @@ const ConsolidatedReports = () => {
   const [summaryDataAvailable, setSummaryDataAvailable] = useState(false);
   const [activeFilters, setActiveFilters] = useState({});
   const [summaryFilter, setSummaryFilter] = useState("operator"); // new summary filter state
+  const [resetButtonHover, setResetButtonHover] = useState(false);
 
   // Utility to convert decimal hours to "H hours M minutes" format
   const formatHoursMinutes = (decimalHours) => {
@@ -802,8 +804,10 @@ const ConsolidatedReports = () => {
               gap: "16px",
             }}
           >
+            
             <div className="filter-group" style={{ minWidth: "160px" }}>
               <label>From Date</label>
+               <FaCalendarAlt className="calendar-icon" />
               <input
                 type="date"
                 value={fromDate}
@@ -813,6 +817,7 @@ const ConsolidatedReports = () => {
             </div>
             <div className="filter-group" style={{ minWidth: "160px" }}>
               <label>To Date</label>
+               <FaCalendarAlt className="calendar-icon" />
               <input
                 type="date"
                 value={toDate}
@@ -820,36 +825,54 @@ const ConsolidatedReports = () => {
                 style={{ width: "100%" }}
               />
             </div>
+                <div className="filter-group" style={{ minWidth: "160px" }}>
+                  <label>Select Filter</label>
+                  <div
+                    className={`filter-value-display clickable`}
+                    onClick={() =>
+                      setShowFilterPopup({
+                        show: true,
+                        type: "summaryFilter",
+                        options: [
+                          { label: "All", value: "all" },
+                          { label: "Operator", value: "operator" },
+                          { label: "Machine", value: "machine" },
+                          { label: "Line", value: "line" },
+                        ],
+                        selectedValues: [summaryFilter],
+                      })
+                    }
+                    style={{ width: "100%" }}
+                  >
+                    {summaryFilter.charAt(0).toUpperCase() +
+                      summaryFilter.slice(1)}
+                  </div>
+                </div>
             <button
-              className="apply-date-button"
+              className="generate-button green-button"
               onClick={fetchData}
               disabled={!fromDate || !toDate}
-              style={{
-                marginTop: "25px",
-                backgroundColor: "#007bff",
-                color: "#fff",
-                height: "36px",
-                minWidth: "110px",
-              }}
             >
-              Apply Date
+              <FaChartBar /> Generate
             </button>
+            
+            
             <button
-              className="reset-date-button"
+              className="action-button reset-button"
+              style={{ 
+                backgroundColor: resetButtonHover ? "#ffcdd2" : "#ffebee", 
+                color: "#2d3436", 
+                borderColor: resetButtonHover ? "#e57373" : "#ef9a9a" 
+              }}
+              onMouseEnter={() => setResetButtonHover(true)}
+              onMouseLeave={() => setResetButtonHover(false)}
               onClick={() => {
                 setFromDate("");
                 setToDate("");
                 setCurrentPage(1);
               }}
-              style={{
-                marginTop: "25px",
-                backgroundColor: "#f44336",
-                color: "#fff",
-                height: "36px",
-                minWidth: "110px",
-              }}
             >
-              Reset Date
+              <FaRedo /> Reset
             </button>
             {tableData.length > 0 && (
               <>
@@ -895,35 +918,14 @@ const ConsolidatedReports = () => {
                     {getFilterDisplayText("operator_name")}
                   </div>
                 </div>
-                <div className="filter-group" style={{ minWidth: "160px" }}>
-                  <label>Summary</label>
-                  <div
-                    className={`filter-value-display clickable`}
-                    onClick={() =>
-                      setShowFilterPopup({
-                        show: true,
-                        type: "summaryFilter",
-                        options: [
-                          { label: "Operator", value: "operator" },
-                          { label: "Machine", value: "machine" },
-                          { label: "Line", value: "line" },
-                        ],
-                        selectedValues: [summaryFilter],
-                      })
-                    }
-                    style={{ width: "100%" }}
-                  >
-                    {summaryFilter.charAt(0).toUpperCase() +
-                      summaryFilter.slice(1)}
-                  </div>
-                </div>
+
                 <button
                   className="reset-filter-button"
                   style={{
                     marginTop: "25px",
                     backgroundColor: "#f44336",
                     color: "#fff",
-                    height: "36px",
+                    height: "41px",
                     minWidth: "110px",
                   }}
                   onClick={() => {
@@ -943,7 +945,7 @@ const ConsolidatedReports = () => {
                     marginTop: "25px",
                     backgroundColor: "#607d8b",
                     color: "#fff",
-                    height: "36px",
+                    height: "41px",
                     minWidth: "110px",
                   }}
                   onClick={handleReset}
@@ -958,7 +960,11 @@ const ConsolidatedReports = () => {
 
       {showFilterPopup.show && (
         <div className="filter-popup">
-          <div className="popup-content">
+          <div className="popup-content"            
+                style={{
+                  maxWidth: "700px !important",
+                  maxHeight: "120vh !important"
+                }} >
             <div className="popup-header">
               <h3>Select {showFilterPopup.type.replace(/_/g, " ")}</h3>
               <button

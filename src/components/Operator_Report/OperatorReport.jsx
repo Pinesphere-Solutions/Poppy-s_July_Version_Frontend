@@ -101,7 +101,7 @@ const OperatorReport = ({ operator_name, fromDate, toDate, allTableData }) => {
     });
 
     fetch(
-      `http://localhost:8000/api/operator_report_by_name/${operator_name}/?${params}`
+      `https://oceanatlantic.pinesphere.co.in/api/operator_report_by_name/${operator_name}/?${params}`
     )
       .then((response) => response.json())
       .then((data) => {

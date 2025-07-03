@@ -1050,6 +1050,7 @@ button1 {
     padding: 15px 0 0 0;
   }
 }
+
 .action-buttons {
   display: flex;
   gap: 10px;
@@ -1121,7 +1122,7 @@ button1 {
 
     .data-table-title {
       font-size: 1.5rem;
-      margin-bottom: 20px;
+      margin-bottom: 2rem;
       color: #333;
     }
 
@@ -1144,7 +1145,7 @@ button1 {
           }
 
           .filter-value-display {
-            padding: 8px 12px;
+            padding: 13px 12px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 14px;
@@ -1182,7 +1183,7 @@ button1 {
         }
 
         button {
-          padding: 8px 16px;
+          padding: 13px 16px;
           border: none;
           border-radius: 4px;
           cursor: pointer;
@@ -1491,4 +1492,54 @@ button1 {
     background-color: #f5f5f5;
     cursor: not-allowed;
   }
+}
+/* container “card” around each date picker */
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  font-family: inherit;
+}
+
+/* move the label up into the padding */
+.filter-group > label {
+  position: absolute;
+  top: -0.6rem;
+  left: 1rem;
+  background: #fff;
+  padding: 0 0.25rem;
+  font-size: 0.75rem;
+  color: #555;
+}
+
+/* space the icon and input nicely */
+.filter-group .calendar-icon {
+  position: absolute;
+  top: 50%;
+  left: 1rem;
+  transform: translateY(-50%);
+  color: #3498db; /* whatever green you like */
+  font-size: 1rem;
+}
+
+/* push input text right of the icon */
+.filter-group input[type="date"] {
+  padding: 12px 12px 12px 38px;
+  font-size: 0.95rem;
+  color: #000;
+  background: transparent;
+  width: 100%;
+}
+
+/* placeholder styling (dd-mm-yyyy) */
+.filter-group input[type="date"]::-webkit-datetime-edit {
+  color: #999;
+  opacity: 1;
+}
+.filter-group input[type="date"]::-webkit-input-placeholder {
+  color: #999;
 }

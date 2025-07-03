@@ -182,7 +182,7 @@ const Lineoverall = () => {
     params.append("from_date", fromDate);
     params.append("to_date", toDate);
 
-    fetch(`http://localhost:8000/api/logs/line-numbers/?${params}`)
+    fetch(`https://oceanatlantic.pinesphere.co.in/api/logs/line-numbers/?${params}`)
       .then((response) => {
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -222,7 +222,7 @@ const Lineoverall = () => {
     params.append("from_date", fromDate);
     params.append("to_date", toDate);
 
-    fetch(`http://localhost:8000/api/logs/filter/?${params}`)
+    fetch(`https://oceanatlantic.pinesphere.co.in/api/logs/filter/?${params}`)
       .then((response) => response.json())
       .then((data) => {
         console.log("Fetched data:", data);
@@ -368,7 +368,7 @@ const Lineoverall = () => {
     params.append("from_date", fromDate);
     params.append("to_date", toDate);
 
-    fetch(`http://localhost:8000/api/line-reports/all/?${params}`)
+    fetch(`https://oceanatlantic.pinesphere.co.in/api/line-reports/all/?${params}`)
       .then((response) => response.json())
       .then((data) => {
         setAllLinesReportData(data.allLinesReport || []);
