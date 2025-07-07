@@ -834,7 +834,6 @@ const ConsolidatedReports = () => {
                         show: true,
                         type: "summaryFilter",
                         options: [
-                          { label: "All", value: "all" },
                           { label: "Operator", value: "operator" },
                           { label: "Machine", value: "machine" },
                           { label: "Line", value: "line" },
@@ -1106,6 +1105,161 @@ const ConsolidatedReports = () => {
       )}
 
       <div className="results-section">
+      <div className="results-header">
+        <div className="results-header-left">
+          <h4>
+            {showSummary
+              ? "Summary Dashboard"
+              : `Results (${filteredData.length} records)`}
+            {loading && <span className="loading-indicator">Loading...</span>}
+          </h4>
+
+          {summaryDataAvailable && (
+            <button
+              className={`view-toggle-button ${
+                showSummary ? "active" : "green-button"
+              }`}
+              onClick={toggleSummaryView}
+              style={{ marginLeft: "20px" }}
+              title={
+                showSummary
+                  ? "Switch to table view"
+                  : "Switch to summary view"
+              }
+            >
+              {showSummary ? (
+                <>
+                  <FaTimes /> Return to Table View
+                </>
+              ) : (
+                <>
+                  <FaChartBar /> View Summary Dashboard
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        <div className="results-controls">
+          {!showSummary && (
+            <div className="rows-per-page">
+              <label>Rows per page:</label>
+              <select
+                value={rowsPerPage}
+                onChange={(e) => {
+                  setRowsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+              >
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </div>
+          )}
+          {showSummary && (
+            <div className="view-mode-indicator">
+              <span>Currently in summary view</span>
+            </div>
+          )}
+          <button
+            onClick={downloadCSV}
+            disabled={!filteredData.length}
+            className="download-button"
+          >
+            <FaDownload /> CSV
+          </button>
+        </div>
+      </div>
+
+      <div className="active-filters">
+        {filters.MACHINE_ID && filters.MACHINE_ID.length > 0 && (
+          <div className="active-filter">
+            Machine ID:
+            {filters.MACHINE_ID.includes("All") ? (
+              <span className="filter-value">
+                All
+                <button onClick={() => removeFilter("MACHINE_ID", "All")}>
+                  ×
+                </button>
+              </span>
+            ) : (
+              filters.MACHINE_ID.map((value, idx) => (
+                <span key={idx} className="filter-value">
+                  {value}
+                  <button onClick={() => removeFilter("MACHINE_ID", value)}>
+                    ×
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+        )}
+
+        {filters.LINE_NUMB && filters.LINE_NUMB.length > 0 && (
+          <div className="active-filter">
+            Line Number:
+            {filters.LINE_NUMB.includes("All") ? (
+              <span className="filter-value">
+                All
+                <button onClick={() => removeFilter("LINE_NUMB", "All")}>
+                  ×
+                </button>
+              </span>
+            ) : (
+              filters.LINE_NUMB.map((value, idx) => (
+                <span key={idx} className="filter-value">
+                  {value}
+                  <button onClick={() => removeFilter("LINE_NUMB", value)}>
+                    ×
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+        )}
+
+        {filters.operator_name && filters.operator_name.length > 0 && (
+          <div className="active-filter">
+            Operator Name:
+            {filters.operator_name.includes("All") ? (
+              <span className="filter-value">
+                All
+                <button onClick={() => removeFilter("operator_name", "All")}>
+                  ×
+                </button>
+              </span>
+            ) : (
+              filters.operator_name.map((value, idx) => (
+                <span key={idx} className="filter-value">
+                  {value}
+                  <button
+                    onClick={() => removeFilter("operator_name", value)}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+        )}
+
+        {(fromDate || toDate) && (
+          <div className="active-filter">
+            Date Range: {fromDate || "Start"} to {toDate || "End"}
+            <button
+              onClick={() => {
+                setFromDate("");
+                setToDate("");
+                setCurrentPage(1);
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+      </div>
         {showSummary && (
           <div className="summary-section" style={{ marginBottom: "48px" }}>
             <h4>Summary Report</h4>
@@ -1627,162 +1781,7 @@ const ConsolidatedReports = () => {
           </div>
         )}
 
-        <div className="results-header">
-          <div className="results-header-left">
-            <h4>
-              {showSummary
-                ? "Summary Dashboard"
-                : `Results (${filteredData.length} records)`}
-              {loading && <span className="loading-indicator">Loading...</span>}
-            </h4>
 
-            {summaryDataAvailable && (
-              <button
-                className={`view-toggle-button ${
-                  showSummary ? "active" : "green-button"
-                }`}
-                onClick={toggleSummaryView}
-                style={{ marginLeft: "20px" }}
-                title={
-                  showSummary
-                    ? "Switch to table view"
-                    : "Switch to summary view"
-                }
-              >
-                {showSummary ? (
-                  <>
-                    <FaTimes /> Return to Table View
-                  </>
-                ) : (
-                  <>
-                    <FaChartBar /> View Summary Dashboard
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-
-          <div className="results-controls">
-            {!showSummary && (
-              <div className="rows-per-page">
-                <label>Rows per page:</label>
-                <select
-                  value={rowsPerPage}
-                  onChange={(e) => {
-                    setRowsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                >
-                  <option value="10">10</option>
-                  <option value="25">25</option>
-                  <option value="50">50</option>
-                  <option value="100">100</option>
-                </select>
-              </div>
-            )}
-            {showSummary && (
-              <div className="view-mode-indicator">
-                <span>Currently in summary view</span>
-              </div>
-            )}
-            <button
-              onClick={downloadCSV}
-              disabled={!filteredData.length}
-              className="download-button"
-              style={{ marginTop: "25px" }}
-            >
-              <FaDownload /> Download CSV
-            </button>
-          </div>
-        </div>
-
-        <div className="active-filters">
-          {filters.MACHINE_ID && filters.MACHINE_ID.length > 0 && (
-            <div className="active-filter">
-              Machine ID:
-              {filters.MACHINE_ID.includes("All") ? (
-                <span className="filter-value">
-                  All
-                  <button onClick={() => removeFilter("MACHINE_ID", "All")}>
-                    ×
-                  </button>
-                </span>
-              ) : (
-                filters.MACHINE_ID.map((value, idx) => (
-                  <span key={idx} className="filter-value">
-                    {value}
-                    <button onClick={() => removeFilter("MACHINE_ID", value)}>
-                      ×
-                    </button>
-                  </span>
-                ))
-              )}
-            </div>
-          )}
-
-          {filters.LINE_NUMB && filters.LINE_NUMB.length > 0 && (
-            <div className="active-filter">
-              Line Number:
-              {filters.LINE_NUMB.includes("All") ? (
-                <span className="filter-value">
-                  All
-                  <button onClick={() => removeFilter("LINE_NUMB", "All")}>
-                    ×
-                  </button>
-                </span>
-              ) : (
-                filters.LINE_NUMB.map((value, idx) => (
-                  <span key={idx} className="filter-value">
-                    {value}
-                    <button onClick={() => removeFilter("LINE_NUMB", value)}>
-                      ×
-                    </button>
-                  </span>
-                ))
-              )}
-            </div>
-          )}
-
-          {filters.operator_name && filters.operator_name.length > 0 && (
-            <div className="active-filter">
-              Operator Name:
-              {filters.operator_name.includes("All") ? (
-                <span className="filter-value">
-                  All
-                  <button onClick={() => removeFilter("operator_name", "All")}>
-                    ×
-                  </button>
-                </span>
-              ) : (
-                filters.operator_name.map((value, idx) => (
-                  <span key={idx} className="filter-value">
-                    {value}
-                    <button
-                      onClick={() => removeFilter("operator_name", value)}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))
-              )}
-            </div>
-          )}
-
-          {(fromDate || toDate) && (
-            <div className="active-filter">
-              Date Range: {fromDate || "Start"} to {toDate || "End"}
-              <button
-                onClick={() => {
-                  setFromDate("");
-                  setToDate("");
-                  setCurrentPage(1);
-                }}
-              >
-                ×
-              </button>
-            </div>
-          )}
-        </div>
 
         {!showSummary && (
           <div className="table-container">
