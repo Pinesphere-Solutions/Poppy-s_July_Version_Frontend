@@ -67,225 +67,200 @@ const ConsolidatedReports = () => {
     LINE_NUMB: [],
     operator_name: [],
   });
-  // Add this function to calculate aggregated metrics based on summaryFilter
-// ...existing code...
-const calculateAggregatedMetrics = () => {
-  if (!filteredData.length) return {
-    productiveTime: 0,
-    needleRuntimePercentage: 0,
-    sewingSpeed: 0,
-    totalHours: 0
-  };
-
-  const nonSummaryData = filteredData.filter(item => !item.isSummary);
+  const calculateAggregatedMetrics = () => {
+    if (!filteredData.length) return {
+      productiveTime: 0,
+      needleRuntimePercentage: 0,
+      sewingSpeed: 0,
+      totalHours: 0
+    };
   
-
-  if (summaryFilter === "operator") {
-    // Group by operator and calculate their aggregated metrics
-    const operatorGroups = {};
-    nonSummaryData.forEach(item => {
-      const key = item.OPERATOR_ID;
-      if (!operatorGroups[key]) {
-        operatorGroups[key] = {
-          sewingHours: 0,
-          totalHours: 10, // Fixed 10 hours per operator per day
-          needleRuntime: 0,
-          sewingSeconds: 0,
-          totalSPM: 0,
-          numberOfInstances: 0
-        };
-      }
-      
-      const sewingHours = item.MODE === 1 ? (item.duration_hours || 0) : 0;
-      operatorGroups[key].sewingHours += sewingHours;
-      operatorGroups[key].sewingSeconds += sewingHours * 3600;
-      
-      // FIXED: Only count needle runtime for sewing mode (MODE 1)
-      if (item.MODE === 1) {
-        operatorGroups[key].needleRuntime += item.NEEDLE_RUNTIME || 0;
-      }
-      
-      // For sewing mode records, add to SPM calculation - FIXED
-      if (item.MODE === 1 && item.RESERVE !== undefined && item.RESERVE !== null) {
-        const reserve = Number(item.RESERVE) || 0;
-        if (reserve > 0) { // Only count meaningful sewing speeds
-          operatorGroups[key].totalSPM += reserve;
-          operatorGroups[key].numberOfInstances += 1;
-        }
-      }
-    });
-  
-    const operators = Object.values(operatorGroups);
-    const totalOperators = operators.length;
+    const nonSummaryData = filteredData.filter(item => !item.isSummary);
     
-    // Calculate average sewing speed using SPM = Total SPM / Number of instances - FIXED
-    const totalSewingSpeed = operators.reduce((sum, op) => {
-      const speed = op.numberOfInstances > 0 ? (op.totalSPM / op.numberOfInstances) : 0;
-      return sum + speed;
-    }, 0);
+    if (summaryFilter === "line") {
+      // Group by line and calculate metrics using the same method as the table
+      const lineNumbers = [...new Set(nonSummaryData.map(d => d.LINE_NUMB))];
+      
+      // Total sums of values across all lines
+      let totalSewing = 0;
+      let totalHours = 0;
+      let totalNeedleRuntime = 0;
+      let totalSPM = 0;
+      let totalSPMInstances = 0;
+      let totalProductiveTime = 0; // This will store sum of percentages (152.58)
     
-    // FIXED: Calculate average needle runtime percentage using the same logic as individual operator table
-    const averageNeedleRuntimePercentage = totalOperators > 0
-      ? operators.reduce((sum, op) => {
-          // Apply the same 10-hour rule logic as individual operator calculation
-          const sewing = op.sewingHours;
-          const workHours = sewing + 0; // We only have sewing hours in this context
-          let idle;
-          if (workHours >= 10) {
-            idle = 0;
-          } else {
-            idle = 10 - workHours;
-          }
-          const totalHours = workHours + idle;
-          
-          // Calculate needle runtime percentage for this operator
-          const sewingSeconds = sewing * 3600;
-          const percentage = sewingSeconds > 0 ? (op.needleRuntime / sewingSeconds * 100) : 0;
-          return sum + percentage;
-        }, 0) / totalOperators
-      : 0;
-    
+      // Calculate values for each line
+      lineNumbers.forEach(lineNum => {
+        const lineRows = nonSummaryData.filter(d => d.LINE_NUMB === lineNum);
+        
+        // Calculate hours for each mode
+        const sewing = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const idle = lineRows.filter(d => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const noFeeding = lineRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const meeting = lineRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const maintenance = lineRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const rework = lineRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const needleBreak = lineRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        
+        // Calculate total hours for this line
+        const lineHours = sewing + idle + noFeeding + meeting + maintenance + rework + needleBreak;
+        
+        // Get needle runtime data
+        const needleRuntime = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+        
+        // Calculate productive time percentage for this line
+        const productiveTimePercent = lineHours > 0 ? (sewing / lineHours) * 100 : 0;
+        
+        // Calculate sewing speed data
+        const sewingModeRecords = lineRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
+        const lineSPM = sewingModeRecords.reduce((sum, d) => {
+          const reserve = Number(d.RESERVE) || 0;
+          return sum + reserve;
+        }, 0);
+        
+        // Add to overall totals
+        totalSewing += sewing;
+        totalHours += lineHours;
+        totalNeedleRuntime += needleRuntime;
+        totalSPM += lineSPM;
+        totalSPMInstances += sewingModeRecords.length;
+        totalProductiveTime += productiveTimePercent; // Sum the percentages (22.22 + 42.86 + 87.5 = 152.58)
+      });
+      
+      // Calculate final metrics
+      const sewingSeconds = totalSewing * 3600; // Convert sewing hours to seconds
+      const needleRuntimePercent = sewingSeconds > 0 ? (totalNeedleRuntime / sewingSeconds) * 100 : 0;
+      const sewingSpeed = totalSPMInstances > 0 ? totalSPM / totalSPMInstances : 0;
+      
+      return {
+        productiveTime: totalProductiveTime, // Return sum of percentages for "Total Productive Time %"
+        needleRuntimePercentage: needleRuntimePercent,
+        sewingSpeed: sewingSpeed,
+        totalHours: totalHours
+      };
+    }
+    else if (summaryFilter === "operator") {
+      // Group by operator
+      const operatorIDs = [...new Set(nonSummaryData.map(d => d.OPERATOR_ID))];
+      let totalSewing = 0;
+      let totalOperatorHours = 0;
+      let totalNeedleRuntime = 0;
+      let totalSewingSeconds = 0;
+      let totalSPM = 0;
+      let totalInstances = 0;
+      
+      // For each operator, calculate their metrics
+      operatorIDs.forEach(opID => {
+        const operatorRows = nonSummaryData.filter(d => d.OPERATOR_ID === opID);
+        
+        // Calculate activity hours
+        const sewing = operatorRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const meeting = operatorRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const noFeeding = operatorRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const maintenance = operatorRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const rework = operatorRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const needleBreak = operatorRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        
+        // Fixed 10 hours per day per operator
+        const operatorHours = 10;
+        
+        // Calculate needle runtime
+        const needleRuntime = operatorRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+        
+        // Calculate sewing speed
+        const sewingModeRecords = operatorRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
+        const operatorSPM = sewingModeRecords.reduce((sum, d) => sum + (Number(d.RESERVE) || 0), 0);
+        const instances = sewingModeRecords.length;
+        
+        // Add to totals
+        totalSewing += sewing;
+        totalOperatorHours += operatorHours;
+        totalNeedleRuntime += needleRuntime;
+        totalSewingSeconds += sewing * 3600;
+        totalSPM += operatorSPM;
+        totalInstances += instances;
+      });
+      
+      // Calculate final operator metrics
+      const productiveTimePercent = totalOperatorHours > 0 ? (totalSewing / totalOperatorHours) * 100 : 0;
+      const needleRuntimePercent = totalSewingSeconds > 0 ? (totalNeedleRuntime / totalSewingSeconds) * 100 : 0;
+      const avgSewingSpeed = totalInstances > 0 ? totalSPM / totalInstances : 0;
+      
+      return {
+        productiveTime: productiveTimePercent, // Use percentage for display
+        needleRuntimePercentage: needleRuntimePercent,
+        sewingSpeed: avgSewingSpeed,
+        totalHours: totalOperatorHours
+      };
+    }
+    else if (summaryFilter === "machine") {
+      // Get all unique machine IDs
+      const machineIds = [...new Set(nonSummaryData.filter(d => !d.isSummary).map(d => d.MACHINE_ID))];
+      
+      // Initialize aggregated metrics
+      let totalProductiveTime = 0; // This will store sum of percentages (152.58)
+      let totalNeedleRuntime = 0;
+      let totalSewingSpeed = 0;
+      let totalHours = 0;
+      
+      // For each machine, calculate its metrics
+      machineIds.forEach(machineId => {
+        const machineRows = nonSummaryData.filter(d => d.MACHINE_ID === machineId && !d.isSummary);
+        
+        // Calculate hours for each mode
+        const sewing = machineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const idle = machineRows.filter(d => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const meeting = machineRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const noFeeding = machineRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const maintenance = machineRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const rework = machineRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const needleBreak = machineRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        
+        // Calculate machine total hours
+        const machineHours = sewing + idle + meeting + noFeeding + maintenance + rework + needleBreak;
+        
+        // Calculate productive percentage for this machine
+        const productivePercent = machineHours > 0 ? (sewing / machineHours) * 100 : 0;
+        
+        // Calculate needle runtime percentage
+        const sewingSeconds = sewing * 3600;
+        const needleRuntime = machineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+        const needleRuntimePercent = sewingSeconds > 0 ? (needleRuntime / sewingSeconds) * 100 : 0;
+        
+        // Calculate sewing speed
+        const sewingModeRecords = machineRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
+        const totalSPM = sewingModeRecords.reduce((sum, d) => {
+          const reserve = Number(d.RESERVE) || 0;
+          return sum + reserve;
+        }, 0);
+        const sewingSpeed = sewingModeRecords.length > 0 ? totalSPM / sewingModeRecords.length : 0;
+        
+        // Add to aggregated values
+        totalProductiveTime += productivePercent; // Sum the percentages (22.22 + 42.86 + 87.5 = 152.58)
+        totalNeedleRuntime += needleRuntimePercent;
+        totalSewingSpeed += sewingSpeed;
+        totalHours += machineHours;
+      });
+      
+      // Get the average needle runtime % and sewing speed
+      const machineCount = machineIds.length;
+      const avgNeedleRuntimePercent = machineCount > 0 ? totalNeedleRuntime / machineCount : 0;
+      const avgSewingSpeed = machineCount > 0 ? totalSewingSpeed / machineCount : 0;
+      
+      return {
+        productiveTime: totalProductiveTime, // Sum of all percentages (152.58)
+        needleRuntimePercentage: avgNeedleRuntimePercent, // Average needle runtime (1.62%)
+        sewingSpeed: avgSewingSpeed, // Average sewing speed (23.75)
+        totalHours: totalHours // Sum of all machine hours (9h 20m)
+      };
+    }
     return {
-      productiveTime: totalOperators > 0 
-        ? (operators.reduce((sum, op) => sum + (op.sewingHours / op.totalHours * 100), 0) / totalOperators)
-        : 0,
-      needleRuntimePercentage: averageNeedleRuntimePercentage, // FIXED: Now matches table calculation
-      sewingSpeed: totalOperators > 0 ? (totalSewingSpeed / totalOperators) : 0,
-      totalHours: operators.reduce((sum, op) => sum + op.totalHours, 0)
+      productiveTime: 0,
+      needleRuntimePercentage: 0,
+      sewingSpeed: 0,
+      totalHours: 0
     };
-  }
-  else if (summaryFilter === "machine") {
-    // Group by machine and calculate their aggregated metrics
-    const machineGroups = {};
-    nonSummaryData.forEach(item => {
-      const key = item.MACHINE_ID;
-      if (!machineGroups[key]) {
-        machineGroups[key] = {
-          sewingHours: 0,
-          totalHours: 10, // Fixed 10 hours per machine
-          needleRuntime: 0,
-          sewingSeconds: 0,
-          totalSPM: 0,
-          numberOfInstances: 0
-        };
-      }
-      
-      const sewingHours = item.MODE === 1 ? (item.duration_hours || 0) : 0;
-      machineGroups[key].sewingHours += sewingHours;
-      machineGroups[key].sewingSeconds += sewingHours * 3600;
-      
-      // FIXED: Only count needle runtime for sewing mode (MODE 1)
-      if (item.MODE === 1) {
-        machineGroups[key].needleRuntime += item.NEEDLE_RUNTIME || 0;
-      }
-      
-      // For sewing mode records, add to SPM calculation
-      if (item.MODE === 1 && item.RESERVE !== undefined && item.RESERVE !== null) {
-        const reserve = Number(item.RESERVE) || 0;
-        if (reserve > 0) {
-          machineGroups[key].totalSPM += reserve;
-          machineGroups[key].numberOfInstances += 1;
-        }
-      }
-    });
-
-    const machines = Object.values(machineGroups);
-    const totalMachines = machines.length;
-    
-    // Calculate average sewing speed using SPM = Total SPM / Number of instances
-    const totalSewingSpeed = machines.reduce((sum, machine) => {
-      const speed = machine.numberOfInstances > 0 ? (machine.totalSPM / machine.numberOfInstances) : 0;
-      return sum + speed;
-    }, 0);
-    
-    // FIXED: Calculate average needle runtime percentage
-    const averageNeedleRuntimePercentage = totalMachines > 0
-      ? machines.reduce((sum, machine) => {
-          const percentage = machine.sewingSeconds > 0 ? (machine.needleRuntime / machine.sewingSeconds * 100) : 0;
-          return sum + percentage;
-        }, 0) / totalMachines
-      : 0;
-    
-    return {
-      productiveTime: totalMachines > 0 
-        ? (machines.reduce((sum, machine) => sum + (machine.sewingHours / machine.totalHours * 100), 0) / totalMachines)
-        : 0,
-      needleRuntimePercentage: averageNeedleRuntimePercentage,
-      sewingSpeed: totalMachines > 0 ? (totalSewingSpeed / totalMachines) : 0,
-      totalHours: machines.reduce((sum, machine) => sum + machine.totalHours, 0)
-    };
-  }
-  else if (summaryFilter === "line") {
-    // Group by line and calculate their aggregated metrics
-    const lineGroups = {};
-    nonSummaryData.forEach(item => {
-      const key = item.LINE_NUMB;
-      if (!lineGroups[key]) {
-        lineGroups[key] = {
-          sewingHours: 0,
-          totalHours: 10, // Fixed 10 hours per line
-          needleRuntime: 0,
-          sewingSeconds: 0,
-          totalSPM: 0,
-          numberOfInstances: 0
-        };
-      }
-      
-      const sewingHours = item.MODE === 1 ? (item.duration_hours || 0) : 0;
-      lineGroups[key].sewingHours += sewingHours;
-      lineGroups[key].sewingSeconds += sewingHours * 3600;
-      
-      // FIXED: Only count needle runtime for sewing mode (MODE 1)
-      if (item.MODE === 1) {
-        lineGroups[key].needleRuntime += item.NEEDLE_RUNTIME || 0;
-      }
-      
-      // For sewing mode records, add to SPM calculation
-      if (item.MODE === 1 && item.RESERVE !== undefined && item.RESERVE !== null) {
-        const reserve = Number(item.RESERVE) || 0;
-        if (reserve > 0) {
-          lineGroups[key].totalSPM += reserve;
-          lineGroups[key].numberOfInstances += 1;
-        }
-      }
-    });
-
-    const lines = Object.values(lineGroups);
-    const totalLines = lines.length;
-    
-    // Calculate average sewing speed using SPM = Total SPM / Number of instances
-    const totalSewingSpeed = lines.reduce((sum, line) => {
-      const speed = line.numberOfInstances > 0 ? (line.totalSPM / line.numberOfInstances) : 0;
-      return sum + speed;
-    }, 0);
-    
-    // FIXED: Calculate average needle runtime percentage
-    const averageNeedleRuntimePercentage = totalLines > 0
-      ? lines.reduce((sum, line) => {
-          const percentage = line.sewingSeconds > 0 ? (line.needleRuntime / line.sewingSeconds * 100) : 0;
-          return sum + percentage;
-        }, 0) / totalLines
-      : 0;
-    
-    return {
-      productiveTime: totalLines > 0 
-        ? (lines.reduce((sum, line) => sum + (line.sewingHours / line.totalHours * 100), 0) / totalLines)
-        : 0,
-      needleRuntimePercentage: averageNeedleRuntimePercentage,
-      sewingSpeed: totalLines > 0 ? (totalSewingSpeed / totalLines) : 0,
-      totalHours: lines.reduce((sum, line) => sum + line.totalHours, 0)
-    };
-  }
-
-  return {
-    productiveTime: 0,
-    needleRuntimePercentage: 0,
-    sewingSpeed: 0,
-    totalHours: 0
   };
-};
-// ...existing code...
-
   const [showFilterPopup, setShowFilterPopup] = useState({
     show: false,
     type: null,
@@ -320,7 +295,7 @@ const calculateAggregatedMetrics = () => {
   const [summaryFilter, setSummaryFilter] = useState("operator"); // new summary filter state
   const [resetButtonHover, setResetButtonHover] = useState(false);
 
-  // Utility to convert decimal hours to "H hours M minutes" format
+  // Update the formatHoursMinutes function
   const formatHoursMinutes = (decimalHours) => {
     if (
       isNaN(decimalHours) ||
@@ -330,17 +305,16 @@ const calculateAggregatedMetrics = () => {
       return "-";
     const hours = Math.floor(decimalHours);
     const minutes = Math.round((decimalHours - hours) * 60);
-    return `${hours} hours${minutes > 0 ? ` ${minutes} minutes` : ""}`;
+    return `${hours}h${minutes > 0 ? ` ${minutes}m` : ""}`;
   };
-
-  // Utility to convert seconds to "H hours M minutes" format
+  
+  // Similarly, update the formatSecondsToHoursMinutes function
   const formatSecondsToHoursMinutes = (seconds) => {
     if (isNaN(seconds) || seconds === null || seconds === undefined) return "-";
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.round((seconds % 3600) / 60);
-    return `${hours} hours${minutes > 0 ? ` ${minutes} minutes` : ""}`;
+    return `${hours}h${minutes > 0 ? ` ${minutes}m` : ""}`;
   };
-
   const fetchData = async () => {
     if (!fromDate || !toDate) {
       setError("Please select both from and to dates");
@@ -1226,61 +1200,66 @@ const calculateAggregatedMetrics = () => {
             </table>
         </div>
         `;
-      } else if (summaryFilter === "line") {
-        return `
-        <div class="section">
-            <h2>Line Number Summary</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Line Number</th>
-                        <th>Total Hours</th>
-                        <th>Sewing</th>
-                        <th>Idle</th>
-                        <th>Meeting</th>
-                        <th>No Feeding</th>
-                        <th>Maintenance</th>
-                        <th>Rework</th>
-                        <th>Needle Break</th>
-                        <th>Productive %</th>
-                        <th>Non-Productive %</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${[...new Set(filteredData.filter(d => !d.isSummary).map(d => d.LINE_NUMB))]
-                      .map((lineNum) => {
-                        const lineRows = filteredData.filter(d => d.LINE_NUMB === lineNum && !d.isSummary);
-                        const totalHours = 10;
-                        const sewing = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const idle = lineRows.filter(d => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const meeting = lineRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const noFeeding = lineRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const maintenance = lineRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const rework = lineRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const needleBreak = lineRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const productivePercent = ((sewing / totalHours) * 100).toFixed(2);
-                        const nonProductivePercent = (((idle + meeting + noFeeding + maintenance + rework + needleBreak) / totalHours) * 100).toFixed(2);
-                        
-                        return `
-                          <tr>
-                            <td>${lineNum}</td>
-                            <td>${formatHoursMinutes(totalHours)}</td>
-                            <td>${formatHoursMinutes(sewing)}</td>
-                            <td>${formatHoursMinutes(idle)}</td>
-                            <td>${formatHoursMinutes(meeting)}</td>
-                            <td>${formatHoursMinutes(noFeeding)}</td>
-                            <td>${formatHoursMinutes(maintenance)}</td>
-                            <td>${formatHoursMinutes(rework)}</td>
-                            <td>${formatHoursMinutes(needleBreak)}</td>
-                            <td>${productivePercent}%</td>
-                            <td>${nonProductivePercent}%</td>
-                          </tr>
-                        `;
-                      }).join('')}
-                </tbody>
-            </table>
-        </div>
-        `;
+      } 
+      else if (summaryFilter === "line") {
+        const lineNumbers = [...new Set(nonSummaryData.filter(d => !d.isSummary).map(d => d.LINE_NUMB))];
+        
+        // Initialize aggregated metrics
+        let totalProductiveTimeSum = 0; // Will store sum of percentages like machine view
+        let totalNeedleRuntime = 0;
+        let totalSewingSpeed = 0;
+        let totalHours = 0;
+        
+        // For each line, calculate its metrics
+        lineNumbers.forEach(lineNum => {
+          const lineRows = nonSummaryData.filter(d => d.LINE_NUMB === lineNum && !d.isSummary);
+          
+          // Calculate hours for each mode
+          const sewing = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          const idle = lineRows.filter(d => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          const meeting = lineRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          const noFeeding = lineRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          const maintenance = lineRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          const rework = lineRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          const needleBreak = lineRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          
+          // Calculate line total hours
+          const lineHours = sewing + idle + meeting + noFeeding + maintenance + rework + needleBreak;
+          
+          // Calculate productive percentage for this line
+          const productivePercent = lineHours > 0 ? (sewing / lineHours) * 100 : 0;
+          
+          // Calculate needle runtime percentage
+          const sewingSeconds = sewing * 3600;
+          const needleRuntime = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+          const needleRuntimePercent = sewingSeconds > 0 ? (needleRuntime / sewingSeconds) * 100 : 0;
+          
+          // Calculate sewing speed
+          const sewingModeRecords = lineRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
+          const totalSPM = sewingModeRecords.reduce((sum, d) => {
+            const reserve = Number(d.RESERVE) || 0;
+            return sum + reserve;
+          }, 0);
+          const sewingSpeed = sewingModeRecords.length > 0 ? totalSPM / sewingModeRecords.length : 0;
+          
+          // Add to totals - sum percentages
+          totalProductiveTimeSum += productivePercent; // Sum of percentages
+          totalNeedleRuntime += needleRuntimePercent;
+          totalSewingSpeed += sewingSpeed;
+          totalHours += lineHours;
+        });
+        
+        // Calculate averages for display
+        const lineCount = lineNumbers.length;
+        const avgNeedleRuntimePercent = lineCount > 0 ? totalNeedleRuntime / lineCount : 0;
+        const avgSewingSpeed = lineCount > 0 ? totalSewingSpeed / lineCount : 0;
+        
+        return {
+          productiveTime: totalProductiveTimeSum, // Sum of percentages
+          needleRuntimePercentage: avgNeedleRuntimePercent,
+          sewingSpeed: avgSewingSpeed,
+          totalHours: totalHours
+        };
       }
       return "";
     };
@@ -2126,6 +2105,9 @@ const calculateAggregatedMetrics = () => {
                           <th>Needle Break</th>
                           <th>Productive %</th>
                           <th>Non-Productive %</th>
+                          <th>Needle Runtime (%)</th>
+                          <th>Sewing Speed</th>
+                          <th>Stitch Count</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2139,7 +2121,6 @@ const calculateAggregatedMetrics = () => {
                           const machineRows = filteredData.filter(
                             (d) => d.MACHINE_ID === machineId && !d.isSummary
                           );
-                          const totalHours = 10;
                           const sewing = machineRows
                             .filter((d) => d.MODE === 1)
                             .reduce(
@@ -2182,8 +2163,36 @@ const calculateAggregatedMetrics = () => {
                               (sum, d) => sum + (d.duration_hours || 0),
                               0
                             );
-                          const productivePercent = ((sewing / totalHours) * 100).toFixed(2);
-                          const nonProductivePercent = (((idle + meeting + noFeeding + maintenance + rework + needleBreak) / totalHours) * 100).toFixed(2);
+                           
+                          // Calculate total hours based on actual data, not fixed 10 hours
+                          const totalHours = sewing + idle + noFeeding + meeting + maintenance + rework + needleBreak;
+                          
+                          // Calculate PT and NPT percentages
+                          const productiveTime = sewing;
+                          const nonProductiveTime = idle + noFeeding + meeting + maintenance + rework + needleBreak;
+                          
+                          const productivePercent = totalHours > 0 ? ((productiveTime / totalHours) * 100).toFixed(2) : "0.00";
+                          const nonProductivePercent = totalHours > 0 ? ((nonProductiveTime / totalHours) * 100).toFixed(2) : "0.00";
+                          
+                          // Calculate needle runtime percentage
+                          const sewingSeconds = sewing * 3600; // Convert sewing hours to seconds
+                          const totalNeedleRuntime = machineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+                          const needleRuntimePercent = sewingSeconds > 0 ?
+                            ((totalNeedleRuntime / sewingSeconds) * 100).toFixed(2) : "0.00";
+                          
+                          // Calculate sewing speed
+                          const sewingModeRecords = machineRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
+                          const totalSPM = sewingModeRecords.reduce((sum, d) => {
+                            const reserve = Number(d.RESERVE) || 0;
+                            return sum + reserve;
+                          }, 0);
+                          const numberOfInstances = sewingModeRecords.length;
+                          const sewingSpeed = numberOfInstances > 0 ? (totalSPM / numberOfInstances).toFixed(2) : "0.00";
+                          
+                          // Calculate stitch count and machine count
+                          const totalStitches = machineRows.reduce((sum, d) => sum + (d.STITCH_COUNT || 0), 0);
+                          const machineCount = new Set(machineRows.map(d => d.MACHINE_ID)).size;
+                          
                           return (
                             <tr key={machineId}>
                               <td>{machineId}</td>
@@ -2197,6 +2206,9 @@ const calculateAggregatedMetrics = () => {
                               <td>{formatHoursMinutes(needleBreak)}</td>
                               <td>{productivePercent}%</td>
                               <td>{nonProductivePercent}%</td>
+                              <td>{needleRuntimePercent}%</td>
+                              <td>{sewingSpeed}</td>
+                              <td>{totalStitches}</td>
                             </tr>
                           );
                         })}
@@ -2266,6 +2278,7 @@ const calculateAggregatedMetrics = () => {
                                                                                   const nonProductivePercent = totalHours > 0 ? (((idle + meeting + noFeeding + maintenance + rework + needleBreak) / totalHours) * 100).toFixed(2) : "0.00";
                                                                                   
                                                                                   // FIXED: Calculate Needle Runtime % using the same logic as Operator Report
+                                                                                                                                                                    // In operator summary section (around line 839)
                                                                                   const sewingSeconds = sewing * 3600; // Convert sewing hours to seconds
                                                                                   const totalNeedleRuntime = operatorRows.filter((d) => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
                                                                                   const needleRuntimePercent = sewingSeconds > 0 ? 
@@ -2307,7 +2320,7 @@ const calculateAggregatedMetrics = () => {
                                                                           </div>
                                                                         </>
                                                                       )}
-              {summaryFilter === "line" && (
+                  {summaryFilter === "line" && (
                 <>
                   <h5 style={{ marginBottom: '20px' }}>Line Number Summary</h5>
                   <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
@@ -2317,42 +2330,79 @@ const calculateAggregatedMetrics = () => {
                           <th>Line Number</th>
                           <th>Total Hours</th>
                           <th>Sewing</th>
-                          <th>Idle</th>
-                          <th>Meeting</th>
-                          <th>No Feeding</th>
-                          <th>Maintenance</th>
+                          <th>Idle Hours</th>
                           <th>Rework</th>
+                          <th>No Feeding</th>
+                          <th>Meeting</th>
+                          <th>Maintenance</th>
                           <th>Needle Break</th>
-                          <th>Productive %</th>
-                          <th>Non-Productive %</th>
+                          <th>PT %</th>
+                          <th>NPT %</th>
+                          <th>Needle Runtime %</th>
+                          <th>Sewing Speed</th>
+                          <th>Stitch Count</th>
+                          <th>Machine Count</th>
                         </tr>
                       </thead>
                       <tbody>
                         {[...new Set(filteredData.filter(d => !d.isSummary).map(d => d.LINE_NUMB))].map(lineNum => {
                           const lineRows = filteredData.filter(d => d.LINE_NUMB === lineNum && !d.isSummary);
-                          const totalHours = 10;
+                          
+                          // Calculate hours for each mode using correct mode mapping
                           const sewing = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
                           const idle = lineRows.filter(d => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                          const meeting = lineRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                          const noFeeding = lineRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                          const noFeeding = lineRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                          const meeting = lineRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
                           const maintenance = lineRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
                           const rework = lineRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
                           const needleBreak = lineRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                          const productivePercent = ((sewing / totalHours) * 100).toFixed(2);
-                          const nonProductivePercent = (((idle + meeting + noFeeding + maintenance + rework + needleBreak) / totalHours) * 100).toFixed(2);
+                          
+                          // Calculate total hours based on actual data, not fixed 10 hours
+                          const totalHours = sewing + idle + noFeeding + meeting + maintenance + rework + needleBreak;
+                          
+                          // Calculate PT and NPT percentages
+                          const productiveTime = sewing;
+                          const nonProductiveTime = idle + noFeeding + meeting + maintenance + rework + needleBreak;
+                          
+                          const productivePercent = totalHours > 0 ? ((productiveTime / totalHours) * 100).toFixed(2) : "0.00";
+                          const nonProductivePercent = totalHours > 0 ? ((nonProductiveTime / totalHours) * 100).toFixed(2) : "0.00";
+                          
+                          // Calculate needle runtime percentage
+                          const sewingSeconds = sewing * 3600; // Convert sewing hours to seconds
+                          const totalNeedleRuntime = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+                          const needleRuntimePercent = sewingSeconds > 0 ?
+                            ((totalNeedleRuntime / sewingSeconds) * 100).toFixed(2) : "0.00";
+                          
+                          // Calculate sewing speed
+                          const sewingModeRecords = lineRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
+                          const totalSPM = sewingModeRecords.reduce((sum, d) => {
+                            const reserve = Number(d.RESERVE) || 0;
+                            return sum + reserve;
+                          }, 0);
+                          const numberOfInstances = sewingModeRecords.length;
+                          const sewingSpeed = numberOfInstances > 0 ? (totalSPM / numberOfInstances).toFixed(2) : "0.00";
+                          
+                          // Calculate stitch count and machine count
+                          const totalStitches = lineRows.reduce((sum, d) => sum + (d.STITCH_COUNT || 0), 0);
+                          const machineCount = new Set(lineRows.map(d => d.MACHINE_ID)).size;
+                          
                           return (
                             <tr key={lineNum}>
                               <td>{lineNum}</td>
                               <td>{formatHoursMinutes(totalHours)}</td>
                               <td>{formatHoursMinutes(sewing)}</td>
                               <td>{formatHoursMinutes(idle)}</td>
-                              <td>{formatHoursMinutes(meeting)}</td>
-                              <td>{formatHoursMinutes(noFeeding)}</td>
-                              <td>{formatHoursMinutes(maintenance)}</td>
                               <td>{formatHoursMinutes(rework)}</td>
+                              <td>{formatHoursMinutes(noFeeding)}</td>
+                              <td>{formatHoursMinutes(meeting)}</td>
+                              <td>{formatHoursMinutes(maintenance)}</td>
                               <td>{formatHoursMinutes(needleBreak)}</td>
                               <td>{productivePercent}%</td>
                               <td>{nonProductivePercent}%</td>
+                              <td>{needleRuntimePercent}%</td>
+                              <td>{sewingSpeed}</td>
+                              <td>{totalStitches}</td>
+                              <td>{machineCount}</td>
                             </tr>
                           );
                         })}
@@ -2363,30 +2413,33 @@ const calculateAggregatedMetrics = () => {
               )}
             </div>
   
-            {/* --- END: Per-ID Single Line Summaries --- */}
-
-            <div className="summary-tiles">
-              <div className="tile production-percentage">
-                <p>{summaryFilter === "operator" ? 
-                  calculateAggregatedMetrics().productiveTime.toFixed(2) : 
-                  calculateAggregatedMetrics().productiveTime.toFixed(2) + "%"}</p>
-                <span>{summaryFilter === "operator" ? "Total Productive Hours" : "Productive Time"}</span>
-              </div>
-              <div className="tile needle-runtime-percentage">
-                <p>{calculateAggregatedMetrics().needleRuntimePercentage.toFixed(2)}%</p>
-                <span>Needle Runtime %</span>
-              </div>              
-              <div className="tile sewing-speed">
-                <p>{summaryFilter === "operator" ? 
-                  calculateAggregatedMetrics().sewingSpeed.toFixed(2) : 
-                  calculateAggregatedMetrics().sewingSpeed.toFixed(0)}</p>
-                <span>{summaryFilter === "operator" ? "Total Sewing Speed" : "Sewing Speed"}</span>
-              </div>
-              <div className="tile total-hours">
-                <p>{formatHoursMinutes(calculateAggregatedMetrics().totalHours)}</p>
-                <span>Total Hours</span>
-              </div>
-            </div>
+     
+                  <div className="summary-tiles">
+                    <div className="tile production-percentage">
+                      <p>
+                        {summaryFilter === "machine" || summaryFilter === "line"
+                          ? calculateAggregatedMetrics().productiveTime.toFixed(2)
+                          : calculateAggregatedMetrics().productiveTime.toFixed(2) + "%"}
+                      </p>
+                      <span>
+                        {summaryFilter === "machine" || summaryFilter === "line" 
+                          ? "Total Productive Time %" 
+                          : "Productive Time"}
+                      </span>
+                    </div>
+                    <div className="tile needle-runtime-percentage">
+                      <p>{calculateAggregatedMetrics().needleRuntimePercentage.toFixed(2)}%</p>
+                      <span>Needle Time</span>
+                    </div>              
+                    <div className="tile sewing-speed">
+                      <p>{calculateAggregatedMetrics().sewingSpeed.toFixed(2)}</p>
+                      <span>Sewing Speed</span>
+                    </div>
+                    <div className="tile total-hours">
+                      <p>{formatHoursMinutes(calculateAggregatedMetrics().totalHours)}</p>
+                      <span>Total Hours</span>
+                    </div>
+                  </div>
             <div className="summary-content" style={{ marginTop: "32px" }}>
               <div className="summary-chart">
                 <Doughnut

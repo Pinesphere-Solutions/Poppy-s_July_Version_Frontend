@@ -481,6 +481,7 @@ const AllLinesReport = ({ reportData, fromDate, toDate, detailedData }) => {
 
   return (
     <div className="line-container">
+
       <div className="table-section">
         <div className="table-header">
           <h3>All Lines Report</h3>
@@ -541,28 +542,60 @@ const AllLinesReport = ({ reportData, fromDate, toDate, detailedData }) => {
 
       <div className="summary-tiles">
         <div className="tile production-percentage">
-          <p>{safeToFixed(reportData[0]?.totalProductiveTime?.percentage)}%</p>
-          <span>Productive Time</span>
+          <p>{
+            (() => {
+              // Calculate sum of PT% for all lines
+              const allRows = reportData.flatMap(line => line.tableData || []);
+              let totalPTPercent = 0;
+              
+              allRows.forEach(row => {
+                const pt = parseFloat(row["Productive Time (PT) %"] || 0);
+                totalPTPercent += pt;
+              });
+              
+              return safeToFixed(totalPTPercent);
+            })()
+          }</p>
+          <span>Total Productive Time %</span>
         </div>
         <div className="tile needle-runtime-percentage">
-          <p>
-            {safeToFixed(
-              reportData && reportData.length > 0
-                ? reportData.reduce(
-                    (sum, line) => sum + (line.needleRuntimePercentage || 0),
-                    0
-                  ) / reportData.length
-                : 0
-            )}
-            %
-          </p>
+          <p>{
+            (() => {
+              // Calculate overall needle runtime percentage
+              const allRows = reportData.flatMap(line => line.tableData || []);
+              let totalNeedleRuntime = 0;
+              let totalSewingSeconds = 0;
+              
+              allRows.forEach(row => {
+                const sewingHours = toTotalMinutes(row["Sewing Hours (PT)"]) / 60;
+                const needleRuntime = row["Needle Runtime"] || 0;
+                
+                totalNeedleRuntime += needleRuntime;
+                totalSewingSeconds += sewingHours * 3600;
+              });
+              
+              return safeToFixed(totalSewingSeconds > 0 ? (totalNeedleRuntime / totalSewingSeconds) * 100 : 0);
+            })()
+          }%</p>
           <span>Needle Runtime %</span>
         </div>
         <div className="tile sewing-speed">
           <p>{
-            reportData[0]?.tableData?.length > 0
-              ? safeToFixed(reportData[0].tableData.reduce((sum, row) => sum + (row["Sewing Speed"] || 0), 0) / reportData[0].tableData.length)
-              : '0.00'
+            (() => {
+              // Calculate average sewing speed
+              const allRows = reportData.flatMap(line => line.tableData || []);
+              let totalSpeed = 0;
+              let count = 0;
+              
+              allRows.forEach(row => {
+                if (row["Sewing Speed"]) {
+                  totalSpeed += parseFloat(row["Sewing Speed"]);
+                  count++;
+                }
+              });
+              
+              return safeToFixed(count > 0 ? totalSpeed / count : 0);
+            })()
           }</p>
           <span>Sewing Speed</span>
         </div>

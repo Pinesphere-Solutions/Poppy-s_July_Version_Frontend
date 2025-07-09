@@ -889,25 +889,35 @@ const AllMachinesReport = ({ reportData = [], fromDate, toDate, detailedData = [
           </table>
         </div>
       </div>
-
-      <div className="summary-tiles">
-        <div className="tile production-percentage">
-          <p>{averageProductivePercentage.toFixed(2)}%</p>
-          <span>Productive Time</span>
-        </div>
-        <div className="tile needle-runtime-percentage">
-          <p>{averageRowNeedleRuntimePercentage.toFixed(2)}%</p>
-          <span>Needle Runtime %</span>
-        </div>
-        <div className="tile sewing-speed">
-          <p>{averageSewingSpeed.toFixed(2)}</p>
-          <span>Sewing Speed</span>
-        </div>
-        <div className="tile total-hours">
-          <p>{formatHoursMinutes(totals.totalHours)}</p>
-          <span>Total Hours</span>
-        </div>
-      </div>
+<div className="summary-tiles">
+  <div className="tile production-percentage">
+    <p>{(() => {
+      // Calculate sum of PT% across all machines
+      const allRows = processedData.flatMap(machine => machine.tableData || []);
+      let totalPTPercent = 0;
+      
+      allRows.forEach(row => {
+        const pt = parseFloat(row["Productive Time (PT) %"] || 0);
+        totalPTPercent += pt;
+      });
+      
+      return totalPTPercent.toFixed(2);
+    })()}</p>
+    <span>Total Productive Time %</span>
+  </div>
+  <div className="tile needle-runtime-percentage">
+    <p>{averageRowNeedleRuntimePercentage.toFixed(2)}%</p>
+    <span>Needle Runtime %</span>
+  </div>
+  <div className="tile sewing-speed">
+    <p>{averageSewingSpeed.toFixed(2)}</p>
+    <span>Sewing Speed</span>
+  </div>
+  <div className="tile total-hours">
+    <p>{formatHoursMinutes(totals.totalHours)}</p>
+    <span>Total Hours</span>
+  </div>
+</div>
 
       <div className="chart-breakdown-container">
         <div className="graph-section">
