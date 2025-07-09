@@ -487,7 +487,7 @@ const AllLinesReport = ({ reportData, fromDate, toDate, detailedData }) => {
           <div className="table-controls">
             <button 
               className="toggle-view-button view-toggle-button green-button"
-              onClick={toggleView}
+              onClick={toggleView} 
               title="View Raw Data"
             >
               <FaTable /> View Raw Data

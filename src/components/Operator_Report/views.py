@@ -22,7 +22,7 @@ from .serializers import UserMachineLogSerializer,MachineLogSerializer
 from django.db.models.functions import ExtractHour, ExtractMinute, ExtractSecond, Cast
 from django.db.models.expressions import ExpressionWrapper
 from datetime import time
-from datetime import datetime, time, timedelta
+
 # Dictionary to map mode numbers to descriptions
 MODES = {
     1: "Sewing",
@@ -77,13 +77,6 @@ def log_machine_data(request):
     if not end_time:
         return Response({"message": "END_TIME is required"}, status=400)
     
-    # Omit logs for Sunday (weekday 6)
-    if log_date.weekday() == 6:
-        return Response({
-            "code": 200,
-            "message": "Log falls on Sunday; no data saved"
-        }, status=200)
-
     # Combine log_date and times into datetime objects for processing
     log_start = datetime.combine(log_date, start_time)
     log_end = datetime.combine(log_date, end_time)
@@ -97,36 +90,6 @@ def log_machine_data(request):
         log_start = work_start
     if log_end > work_end:
         log_end = work_end
-
-    # Define break intervals for the day
-    mb_start = datetime.combine(log_date, time(10, 30))
-    mb_end = datetime.combine(log_date, time(10, 40))
-    lunch_start = datetime.combine(log_date, time(13, 20))
-    lunch_end = datetime.combine(log_date, time(14, 00))
-    eb_start = datetime.combine(log_date, time(16, 20))
-    eb_end = datetime.combine(log_date, time(16, 30))
-
-    # Calculate overlaps with each break
-    overlap_mb = get_overlap(log_start, log_end, mb_start, mb_end)
-    overlap_lunch = get_overlap(log_start, log_end, lunch_start, lunch_end)
-    overlap_eb = get_overlap(log_start, log_end, eb_start, eb_end)
-    total_break_overlap = overlap_mb + overlap_lunch + overlap_eb
-
-    # Compute effective working duration in seconds (subtract break overlap)
-    total_duration_sec = (log_end - log_start).total_seconds()
-    net_duration_sec = total_duration_sec - total_break_overlap
-
-    # If the log entry falls completely in a break, net_duration_sec will be 0.
-    if net_duration_sec <= 0:
-        return Response({
-            "code": 200,
-            "message": "Log falls entirely within break; no data saved"
-        }, status=200)
-
-    # (Optional) Compute the effective duration in hours for reporting purposes.
-    computed_duration = net_duration_sec / 3600.0
-    # Remove duration_hours field from validated_data if not part of model fields.
-    validated_data.pop("duration_hours", None)
 
     # Step 4: Handle Tx_LOGID logic
     if tx_log_id is not None:
@@ -145,9 +108,9 @@ def log_machine_data(request):
                 END_TIME=end_time
             ).exists():
                 return Response({
-                    "code": 200,
-                    "message": "Log saved successfully"
-                }, status=200)
+                    "code": 201,
+                    "errro": "Log not saved"
+                }, status=201)
             validated_data["Str_LOGID"] = adjusted_id
 
     # Step 5: Save the new MachineLog entry without passing duration_hours.
@@ -337,7 +300,6 @@ def hours_to_hm(hours):
         m = 0
     return f"{h}:{m:02d}"
 
-
 @api_view(['GET'])
 def operator_reports_by_name(request, operator_name):
     """
@@ -426,6 +388,8 @@ def operator_reports_by_name(request, operator_name):
     total_maintenance_hours = 0
     total_rework_hours = 0       # Mode 6
     total_needle_break_hours = 0 # Mode 7
+    total_idle_hours = 0
+    total_hours = 0
 
     for mode in mode_hours:
         if mode['MODE'] == 1: total_production_hours = mode['total_hours'] or 0
@@ -502,8 +466,7 @@ def operator_reports_by_name(request, operator_name):
         except Operator.DoesNotExist:
             operator_name = "Unknown"
 
-        # Calculate work hours for the day 
-        # (4.	If work hours < Consumed hours, make idle hours = Consumed hours – work hours.)
+        # Calculate work hours for the day
         sewing_hours = data['sewing_hours'] or 0
         meeting_hours = data['meeting_hours'] or 0
         no_feeding_hours = data['no_feeding_hours'] or 0
@@ -519,34 +482,6 @@ def operator_reports_by_name(request, operator_name):
             rework_hours +
             needle_break_hours
         )
- # --- Begin Consumed Hours Logic ---
-        
-        date_str = str(data['DATE'])
-        today_str = datetime.now().date().isoformat()
-        consumed_hours = 10  # Default
-
-        if date_str == today_str:
-            now = datetime.now()
-            work_start = datetime.combine(now.date(), time(8, 30))
-            consumed_seconds = (now - work_start).total_seconds()
-            if consumed_seconds < 0:
-                consumed_seconds = 0
-            # Breaks: (start, end, duration in seconds)
-            breaks = [
-                (time(10, 30), time(10, 40), 10 * 60),
-                (time(13, 20), time(14, 0), 40 * 60),
-                (time(16, 20), time(16, 30), 10 * 60),
-            ]
-            for start, end, duration in breaks:
-                start_dt = datetime.combine(now.date(), start)
-                end_dt = datetime.combine(now.date(), end)
-                if now > end_dt:
-                    consumed_seconds -= duration
-                elif now > start_dt:
-                    consumed_seconds -= (now - start_dt).total_seconds()
-            consumed_hours = max(0, consumed_seconds / 3600)
-        # --- End Consumed Hours Logic ---
-        
         
         # Rule 2 & 3 for daily breakdown
         if work_hours > 10:
@@ -580,6 +515,16 @@ def operator_reports_by_name(request, operator_name):
             'Stitch Count': int(data['total_stitch_count'] or 0),  # Rule 7: integer value
             'Needle Runtime': int(data['needle_runtime'] or 0)
         })
+        
+        # Accumulate totals using day_total_hours and individual hours after applying the 10-hour rule
+        total_hours += day_total_hours
+        total_production_hours += sewing_hours
+        total_no_feeding_hours += no_feeding_hours
+        total_meeting_hours += meeting_hours
+        total_maintenance_hours += maintenance_hours
+        total_rework_hours += rework_hours
+        total_needle_break_hours += needle_break_hours
+        total_idle_hours += idle_hours
 
     return Response({
         "totalProductionHours": round(total_production_hours, 2),
@@ -605,11 +550,6 @@ def operator_reports_by_name(request, operator_name):
         "totalReworkHours": round(total_rework_hours, 2),
         "totalNeedleBreakHours": round(total_needle_break_hours, 2)
     })
-
-
-
-
-
 
 def process_line_dataM(logs, line_number):
     """Helper function to process data for a single line"""
@@ -1399,6 +1339,8 @@ def operator_reports_all(request):
 
     return Response(all_operators_data)
 
+
+""" Line Report - filter function """
 @api_view(['GET'])
 def filter_logs(request):
     line_number = request.GET.get('line_number')
@@ -1408,7 +1350,17 @@ def filter_logs(request):
     queryset = MachineLog.objects.all()
     
     if line_number and line_number.lower() != 'all':
+       # Debugging: Print the line_number received
+        print(f"filter_logs: Received line_number = {line_number}")
+
+        # Debugging: Print the data type of line_number
+        print(f"filter_logs: Type of line_number = {type(line_number)}")
+
         queryset = queryset.filter(LINE_NUMB=line_number)
+        
+    print(f"filter_logs: line_number = {line_number}, queryset.count() = {queryset.count()}") # Debugging line
+
+
     
     if from_date:
         queryset = queryset.filter(DATE__gte=from_date)
@@ -1459,6 +1411,9 @@ def filter_logs_by_machine_id(request):
     operator_map = {op.rfid_card_no: op.operator_name for op in operators}
     
     data = []
+    
+    if not queryset.exists():
+        return Response({"message": "No data found for the specified line number."}, status=200)
     for log in logs:
         log_data = {
             **log.__dict__,
@@ -2204,6 +2159,7 @@ def process_machine_data(logs, machine_id):
         "totalNeedleRuntime": round(total_needle_runtime, 2),
         "tableData": formatted_table_data
     }
+
 
 
 

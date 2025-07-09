@@ -519,7 +519,7 @@ const AllMachinesReport = ({ reportData = [], fromDate, toDate, detailedData = [
         </style>
       </head>
       <body>
-        <h1>${
+        <h1>${ 
           showTableView
             ? "All Machines Raw Data Report"
             : "All Machines Summary Report"

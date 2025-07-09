@@ -8,7 +8,7 @@ const LineDashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch("https://oceanatlantic.pinesphere.co.in/api/line_summary/")
+    fetch("http://localhost:8000/api/line_summary/")
       .then((response) => response.json())
       .then((data) => setLineSummary(data))
       .catch((error) => console.error("Error fetching line summary:", error));

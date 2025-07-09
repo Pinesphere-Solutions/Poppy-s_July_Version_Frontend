@@ -8,7 +8,7 @@ const OperatorDashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch("https://oceanatlantic.pinesphere.co.in/api/operator_summary/")
+    fetch("http://localhost:8000/api/operator_summary/")
       .then((response) => response.json())
       .then((data) => setOperators(data))
       .catch((error) => console.error("Error fetching operators:", error));

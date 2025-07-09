@@ -46,7 +46,7 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
     if (fromDate) params.append('from_date', fromDate);
     if (toDate) params.append('to_date', toDate);
 
-    fetch(`https://oceanatlantic.pinesphere.co.in/api/line-reports/${lineNumber}/?${params}`)
+    fetch(`http://localhost:8000/api/line-reports/${lineNumber}/?${params}`)
       .then((response) => response.json())
       .then((data) => {
         setReportData({
@@ -221,7 +221,7 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
           .summary-item { margin-bottom: 10px; }
         </style>
       </head>
-      <body>
+      <body> 
         <div class="report-header">
           <h1>Line ${lineNumber} Report</h1>
           <p>Date Range: ${fromDate || 'N/A'} to ${toDate || 'N/A'}</p>

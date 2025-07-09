@@ -92,23 +92,68 @@ const OperatorReport = ({ operator_name, fromDate, toDate, allTableData }) => {
     return isNaN(num) ? "0.00" : num.toFixed(decimals);
   };
 
-  useEffect(() => {
-    if (!operator_name) return;
+ useEffect(() => {
+  if (!operator_name) return;
 
-    const params = new URLSearchParams({
-      from_date: fromDate || "",
-      to_date: toDate || "",
-    });
+  const params = new URLSearchParams({
+    from_date: fromDate || "",
+    to_date: toDate || "",
+    include_raw_data: "true", // Request raw data
+  });
 
-    fetch(
-      `https://oceanatlantic.pinesphere.co.in/api/operator_report_by_name/${operator_name}/?${params}`
-    )
-      .then((response) => response.json())
-      .then((data) => {
+  fetch(
+    `http://localhost:8000/api/operator_report_by_name/${operator_name}/?${params}`
+  )
+    .then((response) => response.json())
+    .then((data) => {
+        // Calculate correct total hours based on your format
+        const calculatedTotalHours =
+          data.tableData && data.tableData.length > 0
+            ? (() => {
+                const firstRow = data.tableData[0];
+
+                // PT = Sewing Hours
+                const sewingHours = (() => {
+                  const val = firstRow["Sewing Hours"];
+                  if (val === null || val === undefined || val === "") return 0;
+                  if (typeof val === "string" && val.includes(":")) {
+                    const [h, m] = val.split(":").map(Number);
+                    if (!isNaN(h) && !isNaN(m)) return h + m / 60;
+                  } else if (!isNaN(Number(val))) {
+                    return Number(val);
+                  }
+                  return 0;
+                })();
+
+                // NPT = Sum of Mode-2 to Mode-7
+                const nptHours = [
+                  "Idle Hours",
+                  "Rework Hours",
+                  "No Feeding Hours",
+                  "Meeting Hours",
+                  "Maintenance Hours",
+                  "Needle Break Hours",
+                ].reduce((sum, key) => {
+                  const val = firstRow[key];
+                  if (val === null || val === undefined || val === "") return sum;
+                  if (typeof val === "string" && val.includes(":")) {
+                    const [h, m] = val.split(":").map(Number);
+                    if (!isNaN(h) && !isNaN(m)) return sum + h + m / 60;
+                  } else if (!isNaN(Number(val))) {
+                    return sum + Number(val);
+                  }
+                  return sum;
+                }, 0);
+
+                return sewingHours + nptHours;
+              })()
+            : data.totalHours;
+
         setReportData({
           ...data,
           tableData: data.tableData,
           allTableData: data.tableData,
+          totalHours: calculatedTotalHours, // Override with calculated total hours
         });
 
         // Reset to first page when new data is loaded
@@ -658,28 +703,26 @@ const OperatorReport = ({ operator_name, fromDate, toDate, allTableData }) => {
                   <td>{safeToFixed(row["NPT %"])}%</td>
                   <td>
                     {(() => {
-                      // Calculate Needle Runtime % = (Needle Runtime / Sewing Hours) * 100
-                      const needleRuntime = Number(row["Needle Runtime"]);
-                      const sewingHours = (() => {
-                        const val = row["Sewing Hours"];
-                        if (val === null || val === undefined || val === "")
-                          return 0;
-                        if (typeof val === "string" && val.includes(":")) {
-                          const [h, m] = val.split(":").map(Number);
-                          if (!isNaN(h) && !isNaN(m)) return h * 3600 + m * 60;
-                        } else if (!isNaN(Number(val))) {
-                          return Number(val) * 3600;
-                        }
-                        return 0;
-                      })();
-                      if (!needleRuntime || !sewingHours) return "-";
-                      return (
-                        safeToFixed((needleRuntime / sewingHours) * 100) + "%"
-                      );
+                      // Use the same value as summary tiles for consistency
+                      return safeToFixed(reportData.needleRuntimePercentage) + "%";
                     })()}
                   </td>
-                  <td>{safeToFixed(row["Sewing Speed"])}</td>
-                  <td>{row["Stitch Count"]}</td>
+                                                                      <td>
+                                                  {(() => {
+                                                    const operatorId = row["Operator ID"];
+                                                    // Always use raw data if available
+                                                    if (reportData.rawData && reportData.rawData.length > 0) {
+                                                      const speed = calculateSewingSpeedFromRawData(reportData.rawData, operatorId);
+                                                      return speed > 0 ? speed.toFixed(2) : "0.00";
+                                                    }
+                                                    if (allTableData && allTableData.length > 0) {
+                                                      const speed = calculateSewingSpeedFromRawData(allTableData, operatorId);
+                                                      return speed > 0 ? speed.toFixed(2) : "0.00";
+                                                    }
+                                                    return safeToFixed(row["Sewing Speed"] || 0);
+                                                  })()}
+                                                </td>
+                 <td>{row["Stitch Count"]}</td>
                 </tr>
               ))}
             </tbody>
@@ -749,8 +792,8 @@ const OperatorReport = ({ operator_name, fromDate, toDate, allTableData }) => {
       </div>
 
       {/* Remove top indicators */}
-
-      {/* Tiles section with updated names and Total Hours */}
+      
+      {/* Tiles section with updated names and Total Hours */}      
       <div className="summary-tiles">
         <div className="tile production-percentage">
           <p>{safeToFixed(reportData.productionPercentage)}%</p>
@@ -761,15 +804,141 @@ const OperatorReport = ({ operator_name, fromDate, toDate, allTableData }) => {
           <span>Needle Time</span>
         </div>
         <div className="tile sewing-speed">
-          <p>{safeToFixed(reportData.averageSewingSpeed)}</p>
+          <p>{(() => {
+            if (!reportData.tableData || reportData.tableData.length === 0) return "0.00";
+            // Single operator
+            if (!isAllOperators) {
+              const firstRow = reportData.tableData[0];
+              if (firstRow) {
+                const operatorId = firstRow["Operator ID"];
+                if (reportData.rawData && reportData.rawData.length > 0) {
+                  const speed = calculateSewingSpeedFromRawData(reportData.rawData, operatorId);
+                  return speed > 0 ? speed.toFixed(2) : "0.00";
+                }
+                if (allTableData && allTableData.length > 0) {
+                  const speed = calculateSewingSpeedFromRawData(allTableData, operatorId);
+                  return speed > 0 ? speed.toFixed(2) : "0.00";
+                }
+                return safeToFixed(firstRow["Sewing Speed"] || 0);
+              }
+              return "0.00";
+            }
+            // All operators: average
+            let totalSewingSpeed = 0;
+            let operatorCount = 0;
+            const operators = [...new Set(sourceData.map(row => row["Operator ID"]))];
+            operators.forEach(operatorId => {
+              let speed = 0;
+              if (reportData.rawData && reportData.rawData.length > 0) {
+                speed = calculateSewingSpeedFromRawData(reportData.rawData, operatorId);
+              } else if (allTableData && allTableData.length > 0) {
+                speed = calculateSewingSpeedFromRawData(allTableData, operatorId);
+              } else {
+                const operatorRows = sourceData.filter(row => row["Operator ID"] === operatorId);
+                speed = parseFloat(operatorRows[0]?.["Sewing Speed"]) || 0;
+              }
+              if (speed > 0) {
+                totalSewingSpeed += speed;
+                operatorCount++;
+              }
+            });
+            const averageSpeed = operatorCount > 0 ? (totalSewingSpeed / operatorCount) : 0;
+            return averageSpeed.toFixed(2);
+          })()}</p>
           <span>Sewing Speed</span>
         </div>
+        
         <div className="tile total-hours">
-          <p>{formatHoursMinutes(reportData.totalHours)}</p>
+          <p>{(() => {
+            if (isAllOperators && sourceData && sourceData.length > 0) {
+              // Calculate cumulative total hours for all operators
+              const cumulativeTotalHours = sourceData.reduce((sum, row) => {
+                // PT = Sewing Hours
+                const sewingHours = (() => {
+                  const val = row["Sewing Hours"];
+                  if (val === null || val === undefined || val === "") return 0;
+                  if (typeof val === "string" && val.includes(":")) {
+                    const [h, m] = val.split(":").map(Number);
+                    if (!isNaN(h) && !isNaN(m)) return h + m / 60;
+                  } else if (!isNaN(Number(val))) {
+                    return Number(val);
+                  }
+                  return 0;
+                })();
+                
+                // NPT = Sum of Mode-2 to Mode-7 (Idle + Rework + No Feeding + Meeting + Maintenance + Needle Break)
+                const nptHours = [
+                  "Idle Hours",
+                  "Rework Hours", 
+                  "No Feeding Hours",
+                  "Meeting Hours",
+                  "Maintenance Hours",
+                  "Needle Break Hours"
+                ].reduce((modeSum, key) => {
+                  const val = row[key];
+                  if (val === null || val === undefined || val === "") return modeSum;
+                  if (typeof val === "string" && val.includes(":")) {
+                    const [h, m] = val.split(":").map(Number);
+                    if (!isNaN(h) && !isNaN(m)) return modeSum + h + m / 60;
+                  } else if (!isNaN(Number(val))) {
+                    return modeSum + Number(val);
+                  }
+                  return modeSum;
+                }, 0);
+                
+                // Total Hours for this operator = PT + NPT
+                const operatorTotalHours = sewingHours + nptHours;
+                return sum + operatorTotalHours;
+              }, 0);
+              
+              return formatHoursMinutes(cumulativeTotalHours);
+            } else {
+              // Single operator - use existing calculation
+              const firstRow = reportData.tableData[0] || {};
+              
+              // PT = Sewing Hours
+              const sewingHours = (() => {
+                const val = firstRow["Sewing Hours"];
+                if (val === null || val === undefined || val === "") return 0;
+                if (typeof val === "string" && val.includes(":")) {
+                  const [h, m] = val.split(":").map(Number);
+                  if (!isNaN(h) && !isNaN(m)) return h + m / 60;
+                } else if (!isNaN(Number(val))) {
+                  return Number(val);
+                }
+                return 0;
+              })();
+              
+              // NPT = Sum of Mode-2 to Mode-7 (Idle + Rework + No Feeding + Meeting + Maintenance + Needle Break)
+              const nptHours = [
+                "Idle Hours",
+                "Rework Hours", 
+                "No Feeding Hours",
+                "Meeting Hours",
+                "Maintenance Hours",
+                "Needle Break Hours"
+              ].reduce((sum, key) => {
+                const val = firstRow[key];
+                if (val === null || val === undefined || val === "") return sum;
+                if (typeof val === "string" && val.includes(":")) {
+                  const [h, m] = val.split(":").map(Number);
+                  if (!isNaN(h) && !isNaN(m)) return sum + h + m / 60;
+                } else if (!isNaN(Number(val))) {
+                  return sum + Number(val);
+                }
+                return sum;
+              }, 0);
+              
+              // Total Hours = PT + NPT
+              const totalCalculatedHours = sewingHours + nptHours;
+              
+              return formatHoursMinutes(totalCalculatedHours);
+            }
+          })()}</p>
           <span>Total Hours</span>
         </div>
       </div>
-
+      
       <div className="chart-breakdown-container">
         <div className="graph-section">
           <h3>Hours Breakdown</h3>
@@ -798,7 +967,7 @@ const OperatorReport = ({ operator_name, fromDate, toDate, allTableData }) => {
                 </Pie>
                 <Tooltip
                   formatter={(value, name) => {
-                    const hours = Math.floor(value / 60);
+                    const hours = Math.floor(value / 3600);
                     const minutes = value % 60;
                     let label = "";
                     if (hours > 0 && minutes > 0)
@@ -889,6 +1058,23 @@ const OperatorReport = ({ operator_name, fromDate, toDate, allTableData }) => {
       </div>
     </div>
   );
+};
+
+const calculateSewingSpeedFromRawData = (rawData, operatorId) => {
+  if (!rawData || rawData.length === 0) return 0;
+  // Calculate average sewing speed (SPM) using the formula:
+  // SPM = (Total of all RESERVE values) / (Number of valid sewing mode instances)
+  const sewingRecords = rawData.filter(
+    record =>
+      String(record.OPERATOR_ID) === String(operatorId) &&
+      record.MODE === 1 &&
+      record.RESERVE !== undefined &&
+      record.RESERVE !== null &&
+      !isNaN(Number(record.RESERVE)) &&
+      Number(record.RESERVE) > 0
+  );
+  const totalSPM = sewingRecords.reduce((sum, record) => sum + Number(record.RESERVE), 0);
+  return totalSPM / sewingRecords.length;
 };
 
 export default OperatorReport;

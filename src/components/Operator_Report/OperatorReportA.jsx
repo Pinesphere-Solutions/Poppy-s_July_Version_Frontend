@@ -49,7 +49,7 @@ const OperatorReportA = ({ operator_name, fromDate, toDate }) => {
     const encodedToDate = toDate ? encodeURIComponent(toDate) : "";
 
     // Create URL with properly encoded parameters
-    const url = `https://oceanatlantic.pinesphere.co.in/api/api/operator-afl-reports/${encodedOperator}/?from_date=${encodedFromDate}&to_date=${encodedToDate}`;
+    const url = `http://localhost:8000/api/api/operator-afl-reports/${encodedOperator}/?from_date=${encodedFromDate}&to_date=${encodedToDate}`;
 
     fetch(url)
       .then((response) => response.json())
