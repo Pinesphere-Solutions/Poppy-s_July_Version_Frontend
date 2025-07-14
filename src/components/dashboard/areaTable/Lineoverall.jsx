@@ -149,6 +149,7 @@ const toTotalMinutes = (input) => {
 };
 
 const Lineoverall = () => {
+  const [allLinesReportSummary, setAllLinesReportSummary] = useState(null);
   const [tableData, setTableData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [fromDate, setFromDate] = useState("");
@@ -182,7 +183,7 @@ const Lineoverall = () => {
     params.append("from_date", fromDate);
     params.append("to_date", toDate);
 
-    fetch(`http://localhost:8000/api/logs/line-numbers/?${params}`)
+    fetch(`https://oceanatlantic.pinesphere.co.in/api/logs/line-numbers/?${params}`)
       .then((response) => {
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -222,7 +223,7 @@ const Lineoverall = () => {
     params.append("from_date", fromDate);
     params.append("to_date", toDate);
 
-    fetch(`http://localhost:8000/api/logs/filter/?${params}`)
+    fetch(`https://oceanatlantic.pinesphere.co.in/api/logs/filter/?${params}`)
       .then((response) => response.json())
       .then((data) => {
         console.log("Fetched data:", data);
@@ -363,15 +364,36 @@ const Lineoverall = () => {
     return inBreakPeriod ? 0 : 1;
   };
 
+   
   const fetchAllLinesReport = (filteredData) => {
+
+    // Remove the following line, it is incorrect inside this function:
+    // const [allLinesReportSummary, setAllLinesReportSummary] = useState(null);
+
     const params = new URLSearchParams();
     params.append("from_date", fromDate);
     params.append("to_date", toDate);
-
-    fetch(`http://localhost:8000/api/line-reports/all/?${params}`)
+  
+    fetch(`https://oceanatlantic.pinesphere.co.in/api/line-reports/all/?${params}`)
       .then((response) => response.json())
       .then((data) => {
-        setAllLinesReportData(data.allLinesReport || []);
+        // Fix: Map needle_runtime to Needle Runtime for each row in each line's tableData
+        const fixedReport = (data.allLinesReport || []).map(line => ({
+          ...line,
+          tableData: (line.tableData || []).map(row => ({
+            ...row,
+            // Map snake_case to title case with spaces for frontend compatibility
+            "Needle Runtime": row.needle_runtime !== undefined ? row.needle_runtime : (row["Needle Runtime"] || 0),
+            "Needle Runtime Percentage": row["Needle Runtime Percentage"] !== undefined
+              ? row["Needle Runtime Percentage"]
+              : row.needle_runtime_percentage !== undefined
+                ? row.needle_runtime_percentage
+                : 0,
+          }))
+        }));
+  
+        setAllLinesReportData(fixedReport);
+        setAllLinesReportSummary(data.summary || null); // <-- Add this line to set summary
         setDataGenerated(true);
         setShowAllLines(true);
         setIsLoading(false);
@@ -381,6 +403,8 @@ const Lineoverall = () => {
         setIsLoading(false);
       });
   };
+  
+ 
 
   const handleLineNumberChange = (e) => {
     setSelectedLineNumber(e.target.value);
@@ -481,249 +505,256 @@ const Lineoverall = () => {
   const currentRows = filteredData.slice(indexOfFirstRow, indexOfLastRow);
   const totalPages = Math.ceil(filteredData.length / rowsPerPage);
 
-  return (
-    <section className="content-area-table">
-      <div className="filter-section">
-        <div className="main-filters">
-          <div className="date-filter">
-            <div className="date-input-group">
-              <div className="date-field">
-                <FaCalendarAlt className="calendar-icon" />
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={handleFromDateChange}
-                  className="date-input"
-                />
-                <span className="date-label">From</span>
-              </div>
-              <div className="date-separator">to</div>
-              <div className="date-field">
-                <FaCalendarAlt className="calendar-icon" />
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={handleToDateChange}
-                  className="date-input"
-                />
-                <span className="date-label">To</span>
+   return (
+    
+      <section className="content-area-table">
+        <div className="filter-section">
+          <div className="main-filters">
+            <div className="date-filter">
+              <div className="date-input-group">
+                <div className="date-field">
+                  <FaCalendarAlt className="calendar-icon" />
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={handleFromDateChange}
+                    className="date-input"
+                  />
+                  <span className="date-label">From</span>
+                </div>
+                <div className="date-separator">to</div>
+                <div className="date-field">
+                  <FaCalendarAlt className="calendar-icon" />
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={handleToDateChange}
+                    className="date-input"
+                  />
+                  <span className="date-label">To</span>
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="machine-selector">
-            <label>Select Line Number:</label>
-            <div className="select-wrapper">
-              <select
-                value={selectedLineNumber}
-                onChange={handleLineNumberChange}
-                className="line-number-select"
-                disabled={!fromDate || !toDate || isFetchingLines}
-              >
-                <option value="">
-                  {isFetchingLines
-                    ? "Loading lines..."
-                    : !fromDate || !toDate
-                    ? "Select dates first"
-                    : availableLineNumbers.length === 0
-                    ? "No lines available"
-                    : "Select a line number"}
-                </option>
-                <option value="all">All Lines</option>
-                {availableLineNumbers.map((lineNumber) => (
-                  <option key={lineNumber} value={lineNumber}>
-                    {lineNumber}
+  
+            <div className="machine-selector">
+              <label>Select Line Number:</label>
+              <div className="select-wrapper">
+                <select
+                  value={selectedLineNumber}
+                  onChange={handleLineNumberChange}
+                  className="line-number-select"
+                  disabled={!fromDate || !toDate || isFetchingLines}
+                >
+                  <option value="">
+                    {isFetchingLines
+                      ? "Loading lines..."
+                      : !fromDate || !toDate
+                      ? "Select dates first"
+                      : availableLineNumbers.length === 0
+                      ? "No lines available"
+                      : "Select a line number"}
                   </option>
-                ))}
-              </select>
-              {isFetchingLines && (
-                <div className="select-loading-indicator"></div>
+                  <option value="all">All Lines</option>
+                  {availableLineNumbers.map((lineNumber) => (
+                    <option key={lineNumber} value={lineNumber}>
+                      {lineNumber}
+                    </option>
+                  ))}
+                </select>
+                {isFetchingLines && (
+                  <div className="select-loading-indicator"></div>
+                )}
+              </div>
+            </div>
+  
+            <div className="apply-filter-container">
+              <button
+                className={`generate-button green-button ${
+                  !selectedLineNumber ? "disabled" : ""
+                }`}
+                onClick={applyFilters}
+                disabled={!selectedLineNumber}
+                title="Apply Filters"
+                style={{ marginRight: "22px" }}
+              >
+                <FaChartBar /> Generate
+              </button>
+  
+              {dataGenerated && !showAllLines && (
+                <button
+                  className={`view-toggle-button green-button ${
+                    !dataGenerated ? "disabled" : ""
+                  }`}
+                  onClick={toggleView}
+                  disabled={!dataGenerated}
+                  title={showTableView ? "View Chart" : "View Raw Data"}
+                  style={{ marginRight: "18px" }}
+                >
+                  {showTableView ? <FaChartBar /> : <FaTable />}
+                  {showTableView ? " View Chart" : " View Raw Data"}
+                </button>
               )}
             </div>
-          </div>
-
-          <div className="apply-filter-container">
-            <button
-              className={`generate-button green-button ${
-                !selectedLineNumber ? "disabled" : ""
-              }`}
-              onClick={applyFilters}
-              disabled={!selectedLineNumber}
-              title="Apply Filters"
-              style={{ marginRight: "22px" }}
-            >
-              <FaChartBar /> Generate
-            </button>
-
-            {dataGenerated && !showAllLines && (
-              <button
-                className={`view-toggle-button green-button ${
-                  !dataGenerated ? "disabled" : ""
-                }`}
-                onClick={toggleView}
-                disabled={!dataGenerated}
-                title={showTableView ? "View Chart" : "View Raw Data"}
-                style={{ marginRight: "18px" }}
-              >
-                {showTableView ? <FaChartBar /> : <FaTable />}
-                {showTableView ? " View Chart" : " View Raw Data"}
-              </button>
-            )}
-          </div>
-
-          <div className="action-buttons-container">
-            <div className="action-buttons">
-              <button
-                className="action-button reset-button"
-                onClick={handleReset}
-                title="Reset All Filters"
-                style={{ marginBottom: "-5px" }}
-              >
-                <FaRedo /> Reset
-              </button>
+  
+            <div className="action-buttons-container">
+              <div className="action-buttons">
+                <button
+                  className="action-button reset-button"
+                  onClick={handleReset}
+                  title="Reset All Filters"
+                  style={{ marginBottom: "-5px" }}
+                >
+                  <FaRedo /> Reset
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="content-section">
-        {isLoading ? (
-          <div className="loading-state">
-            <div className="loader"></div>
-            <p>Loading data...</p>
-          </div>
-        ) : !fromDate || !toDate ? (
-          <div className="no-selection-state">
-            <FaSearch className="search-icon" />
-            <p>Select a date range to view available line numbers</p>
-          </div>
-        ) : !selectedLineNumber ? (
-          <div className="no-selection-state">
-            <FaSearch className="search-icon" />
-            <p>
-              {availableLineNumbers.length === 0
-                ? "No lines available for selected dates"
-                : "Select a line number from the dropdown"}
-            </p>
-          </div>
-        ) : showAllLines ? (
-          <AllLinesReport
-            reportData={allLinesReportData}
-            detailedData={filteredData}
-            fromDate={fromDate}
-            toDate={toDate}
-          />
-        ) : showTableView ? (
-          <div className="table-container">
-            <div className="table-header">
-              <h3>Raw Data Report</h3>
-              <div className="table-controls">
-                <div className="download-buttons button">
-                  <button onClick={downloadCSV}>
-                    <FaDownload /> CSV
-                  </button>
-                  <button onClick={downloadHTML}>
-                    <FaDownload /> HTML
-                  </button>
+  
+        <div className="content-section">
+          {isLoading ? (
+            <div className="loading-state">
+              <div className="loader"></div>
+              <p>Loading data...</p>
+            </div>
+          ) : !fromDate || !toDate ? (
+            <div className="no-selection-state">
+              <FaSearch className="search-icon" />
+              <p>Select a date range to view available line numbers</p>
+            </div>
+          ) : !selectedLineNumber ? (
+            <div className="no-selection-state">
+              <FaSearch className="search-icon" />
+              <p>
+                {availableLineNumbers.length === 0
+                  ? "No lines available for selected dates"
+                  : "Select a line number from the dropdown"}
+              </p>
+            </div>
+          ) : selectedLineNumber === "all" && !dataGenerated ? (
+            <div className="no-selection-state">
+              <FaSearch className="search-icon" />
+              <p>Select "Generate" to view All Lines Report</p>
+            </div>
+          ) : showAllLines ? (
+            <AllLinesReport
+              reportData={allLinesReportData}
+              summary={allLinesReportSummary}
+              detailedData={filteredData}
+              fromDate={fromDate}
+              toDate={toDate}
+            />
+          ) : showTableView ? (
+            <div className="table-container">
+              <div className="table-header">
+                <h3>Raw Data Report</h3>
+                <div className="table-controls">
+                  <div className="download-buttons button">
+                    <button onClick={downloadCSV}>
+                      <FaDownload /> CSV
+                    </button>
+                    <button onClick={downloadHTML}>
+                      <FaDownload /> HTML
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="table-wrapper">
-              {filteredData.length > 0 ? (
-                <>
-                  <table>
-                    <thead>
-                      <tr>
-                        {TABLE_HEADS.map((th, index) => (
-                          <th key={index}>{th.label}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentRows.map((dataItem, index) => (
-                        <tr key={index}>
-                          {TABLE_HEADS.map((th, thIndex) => (
-                            <td key={thIndex}>
-                              {th.key === "serial_number"
-                                ? indexOfFirstRow + index + 1
-                                : th.key === "created_at" && dataItem[th.key]
-                                ? formatConsistentDateTime(dataItem[th.key])
-                                : th.key === "calculation_value"
-                                ? dataItem[th.key] !== undefined
-                                  ? dataItem[th.key]
-                                  : "-"
-                                : dataItem[th.key] || "-"}
-                            </td>
+              <div className="table-wrapper">
+                {filteredData.length > 0 ? (
+                  <>
+                    <table>
+                      <thead>
+                        <tr>
+                          {TABLE_HEADS.map((th, index) => (
+                            <th key={index}>{th.label}</th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="pagination-controls">
-                    <div className="rows-per-page">
-                      <span>Rows per page:</span>
-                      <select
-                        value={rowsPerPage}
-                        onChange={(e) => {
-                          setRowsPerPage(Number(e.target.value));
-                          setCurrentPage(1);
-                        }}
-                      >
-                        {[10, 25, 50, 100].map((size) => (
-                          <option key={size} value={size}>
-                            {size}
-                          </option>
+                      </thead>
+                      <tbody>
+                        {currentRows.map((dataItem, index) => (
+                          <tr key={index}>
+                            {TABLE_HEADS.map((th, thIndex) => (
+                              <td key={thIndex}>
+                                {th.key === "serial_number"
+                                  ? indexOfFirstRow + index + 1
+                                  : th.key === "created_at" && dataItem[th.key]
+                                  ? formatConsistentDateTime(dataItem[th.key])
+                                  : th.key === "calculation_value"
+                                  ? dataItem[th.key] !== undefined
+                                    ? dataItem[th.key]
+                                    : "-"
+                                  : dataItem[th.key] || "-"}
+                              </td>
+                            ))}
+                          </tr>
                         ))}
-                      </select>
-                    </div>
-
-                    <div className="page-info">
-                      {`${indexOfFirstRow + 1}-${Math.min(
-                        indexOfLastRow,
-                        filteredData.length
-                      )} of ${filteredData.length}`}
-                    </div>
-
-                    <div className="page-buttons">
-                      <button
-                        onClick={() =>
-                          setCurrentPage((prev) => Math.max(prev - 1, 1))
-                        }
-                        disabled={currentPage === 1}
-                      >
-                        Previous
-                      </button>
-                      <button
-                        onClick={() =>
-                          setCurrentPage((prev) =>
-                            Math.min(
-                              prev + 1,
-                              Math.ceil(filteredData.length / rowsPerPage)
+                      </tbody>
+                    </table>
+                    <div className="pagination-controls">
+                      <div className="rows-per-page">
+                        <span>Rows per page:</span>
+                        <select
+                          value={rowsPerPage}
+                          onChange={(e) => {
+                            setRowsPerPage(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                        >
+                          {[10, 25, 50, 100].map((size) => (
+                            <option key={size} value={size}>
+                              {size}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+  
+                      <div className="page-info">
+                        {`${indexOfFirstRow + 1}-${Math.min(
+                          indexOfLastRow,
+                          filteredData.length
+                        )} of ${filteredData.length}`}
+                      </div>
+  
+                      <div className="page-buttons">
+                        <button
+                          onClick={() =>
+                            setCurrentPage((prev) => Math.max(prev - 1, 1))
+                          }
+                          disabled={currentPage === 1}
+                        >
+                          Previous
+                        </button>
+                        <button
+                          onClick={() =>
+                            setCurrentPage((prev) =>
+                              Math.min(
+                                prev + 1,
+                                Math.ceil(filteredData.length / rowsPerPage)
+                              )
                             )
-                          )
-                        }
-                        disabled={
-                          currentPage === totalPages || totalPages === 0
-                        }
-                      >
-                        Next
-                      </button>
+                          }
+                          disabled={
+                            currentPage === totalPages || totalPages === 0
+                          }
+                        >
+                          Next
+                        </button>
+                      </div>
                     </div>
+                  </>
+                ) : (
+                  <div className="no-data-state">
+                    <p>No data available for the selected filters</p>
                   </div>
-                </>
-              ) : (
-                <div className="no-data-state">
-                  <p>No data available for the selected filters</p>
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          </div>
-        ) : filteredData.length === 0 ? (
-          <div className="no-data-state">
-            <p>No data available for the selected filters</p>
-          </div>
-        ) : (
-          <div className="line-report-section">
+          ) : filteredData.length === 0 ? (
+            <div className="no-data-state">
+              <p>No data available for the selected filters</p>
+            </div>
+          ) : (
+            <div className="line-report-section">
             <LineReport
               lineNumber={selectedLineNumber}
               fromDate={fromDate}
@@ -735,6 +766,6 @@ const Lineoverall = () => {
       </div>
     </section>
   );
-};
+  };
 
 export default Lineoverall;

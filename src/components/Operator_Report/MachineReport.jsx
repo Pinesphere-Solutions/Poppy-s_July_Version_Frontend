@@ -5,6 +5,7 @@ import "./MachineStyles.css";
 import { useLocation } from "react-router-dom";
 
 const MachineReport = ({ machine_id, fromDate, toDate }) => {
+ 
   const location = useLocation();
   const [retryCount, setRetryCount] = useState(0); // Add this at the top, after useState declarations
 
@@ -51,7 +52,7 @@ const MachineReport = ({ machine_id, fromDate, toDate }) => {
     if (toDate) params.append("to_date", toDate);
 
     fetch(
-      `http://localhost:8000/api/api/machines/${machine_id}/reports/?${params}`
+      `https://oceanatlantic.pinesphere.co.in/api/api/machines/${machine_id}/reports/?${params}`
     )
       .then((response) => response.json())
       .then((data) => {
@@ -110,6 +111,7 @@ const MachineReport = ({ machine_id, fromDate, toDate }) => {
     }));
   };
 
+  
   /*  const downloadCSV = () => {
     const headers = Object.keys(reportData.tableData[0] || {});
     const csvRows = [
@@ -187,8 +189,10 @@ const MachineReport = ({ machine_id, fromDate, toDate }) => {
       return SUMMARY_TABLE_HEADS.map((head) =>
         head.key === "Machine ID"
           ? row["Machine ID"] || machine_id
+          /* : head.key === "Needle Runtime"
+          ? needleRuntimePercent.toFixed(2) + "%" */
           : head.key === "Needle Runtime"
-          ? needleRuntimePercent.toFixed(2) + "%"
+            ? safeToFixed(reportData.needleRuntimePercentage || 0) + "%"
           : timeKeys.includes(head.key)
           ? formatHoursMinutes(row[head.key])
           : row[head.key]?.toFixed
@@ -429,7 +433,7 @@ const MachineReport = ({ machine_id, fromDate, toDate }) => {
                     <td>
                       {(row["Non-Productive Time (NPT) %"] || 0).toFixed(2)}%
                     </td>
-                    <td>{needleRuntimePercent.toFixed(2)}%</td>
+                    <td>{safeToFixed(reportData.needleRuntimePercentage || 0)}%</td>
                     <td>{(row["Sewing Speed"] || 0).toFixed(2)}</td>
                     <td>{row["Stitch Count"] || 0}</td>
                   </tr>
@@ -445,34 +449,12 @@ const MachineReport = ({ machine_id, fromDate, toDate }) => {
           <p>{safeToFixed(reportData.totalProductiveTime.percentage)}%</p>
           <span>Productive Time</span>
         </div>
+        {/* Tile Calculation Block */}
         <div className="tile needle-runtime-percentage">
-          <p>
-            {safeToFixed(
-              reportData.totalNeedleRuntime &&
-                reportData.totalProductiveTime.hours
-                ? (function () {
-                    // Calculate total sewing seconds
-                    let sewing = reportData.totalProductiveTime.hours;
-                    let sewingSeconds = 0;
-                    if (typeof sewing === "string" && sewing.includes(":")) {
-                      const [h, m] = sewing.split(":").map(Number);
-                      sewingSeconds =
-                        (isNaN(h) ? 0 : h) * 3600 + (isNaN(m) ? 0 : m) * 60;
-                    } else if (!isNaN(Number(sewing))) {
-                      const num = Number(sewing);
-                      if (num > 10000) sewingSeconds = num; // already seconds
-                      else sewingSeconds = num * 3600; // decimal hours
-                    }
-                    return sewingSeconds > 0
-                      ? (reportData.totalNeedleRuntime / sewingSeconds) * 100
-                      : 0;
-                  })()
-                : 0
-            )}
-            %
-          </p>
+          <p>{safeToFixed(reportData.needleRuntimePercentage || 0)}%</p>
           <span>Needle Runtime %</span>
         </div>
+
         <div className="tile sewing-speed">
           <p>
             {reportData.tableData.length > 0

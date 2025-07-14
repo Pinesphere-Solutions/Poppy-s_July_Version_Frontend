@@ -91,7 +91,7 @@ const OperatoroverallA = () => {
 
     setIsLoading(true);
     try {
-      let url = `http://localhost:8000/api/user-machine-logs/?`;
+      let url = `https://oceanatlantic.pinesphere.co.in/api/user-machine-logs/?`;
       if (fromDate) url += `from_date=${fromDate}&`;
       if (toDate) url += `to_date=${toDate}`;
 

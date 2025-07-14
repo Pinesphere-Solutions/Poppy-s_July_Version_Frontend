@@ -57,7 +57,7 @@ const formatDateTime = (dateTimeString) => {
   }
 };
 
-const API_URL = "http://localhost:8000/api/get_consolidated_logs/";
+const API_URL = "https://oceanatlantic.pinesphere.co.in/api/get_consolidated_logs/";
 
 const ConsolidatedReports = () => {
   const [tableData, setTableData] = useState([]);
@@ -68,110 +68,246 @@ const ConsolidatedReports = () => {
     operator_name: [],
   });
   const calculateAggregatedMetrics = () => {
-    if (!filteredData.length) return {
-      productiveTime: 0,
-      needleRuntimePercentage: 0,
-      sewingSpeed: 0,
-      totalHours: 0
-    };
-  
-    const nonSummaryData = filteredData.filter(item => !item.isSummary);
-    
-    if (summaryFilter === "line") {
-      // Group by line and calculate metrics using the same method as the table
-      const lineNumbers = [...new Set(nonSummaryData.map(d => d.LINE_NUMB))];
-      
-      // Total sums of values across all lines
+    if (!filteredData.length)
+      return {
+        productiveTime: 0,
+        needleRuntimePercentage: 0,
+        sewingSpeed: 0,
+        totalHours: 0,
+      };
+
+    const nonSummaryData = filteredData.filter((item) => !item.isSummary);
+
+    // Fix for machine summary filter calculation
+    if (summaryFilter === "machine") {
+      const machineIds = [...new Set(nonSummaryData.map((d) => d.MACHINE_ID))];
+
+      let totalSewing = 0; // Total productive hours
+      let totalHours = 0; // Total of all hours
+      let totalNeedleRuntime = 0;
+      let totalSPM = 0;
+      let totalSPMInstances = 0;
+
+      machineIds.forEach((machineId) => {
+        const machineRows = nonSummaryData.filter(
+          (d) => d.MACHINE_ID === machineId
+        );
+
+        // Calculate hours for each mode
+        const sewing = machineRows
+          .filter((d) => d.MODE === 1)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const idle = machineRows
+          .filter((d) => d.MODE === 2)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const meeting = machineRows
+          .filter((d) => d.MODE === 3)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const noFeeding = machineRows
+          .filter((d) => d.MODE === 4)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const maintenance = machineRows
+          .filter((d) => d.MODE === 5)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const rework = machineRows
+          .filter((d) => d.MODE === 6)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const needleBreak = machineRows
+          .filter((d) => d.MODE === 7)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+
+        const machineHours =
+          sewing +
+          idle +
+          meeting +
+          noFeeding +
+          maintenance +
+          rework +
+          needleBreak;
+
+        // Get needle runtime and SPM data
+        const sewingModeRecords = machineRows.filter(
+          (d) => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null
+        );
+        const machineNeedleRuntime = machineRows
+          .filter((d) => d.MODE === 1)
+          .reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+        const machineSPM = sewingModeRecords.reduce(
+          (sum, d) => sum + Number(d.RESERVE || 0),
+          0
+        );
+
+        // Add to totals
+        totalSewing += sewing;
+        totalHours += machineHours;
+        totalNeedleRuntime += machineNeedleRuntime;
+        totalSPM += machineSPM;
+        totalSPMInstances += sewingModeRecords.length;
+      });
+
+      // Calculate the overall PT percentage - this is the key fix
+      const productiveTimePercent =
+        totalHours > 0 ? (totalSewing / totalHours) * 100 : 0;
+
+      // Calculate needle runtime percentage
+      const totalSewingSeconds = totalSewing * 3600;
+      const needleRuntimePercent =
+        totalSewingSeconds > 0
+          ? (totalNeedleRuntime / totalSewingSeconds) * 100
+          : 0;
+
+      // Calculate sewing speed
+      const sewingSpeed =
+        totalSPMInstances > 0 ? totalSPM / totalSPMInstances : 0;
+
+      return {
+        productiveTime: productiveTimePercent, // FIXED: Return the calculated percentage
+        needleRuntimePercentage: needleRuntimePercent,
+        sewingSpeed: sewingSpeed,
+        totalHours: totalHours,
+      };
+    }
+    // Fix for machine summary filter calculation
+    else if (summaryFilter === "line") {
+      const lineNumbers = [...new Set(nonSummaryData.map((d) => d.LINE_NUMB))];
+
       let totalSewing = 0;
       let totalHours = 0;
       let totalNeedleRuntime = 0;
       let totalSPM = 0;
       let totalSPMInstances = 0;
-      let totalProductiveTime = 0; // This will store sum of percentages (152.58)
-    
-      // Calculate values for each line
-      lineNumbers.forEach(lineNum => {
-        const lineRows = nonSummaryData.filter(d => d.LINE_NUMB === lineNum);
-        
+
+      lineNumbers.forEach((lineNum) => {
+        const lineRows = nonSummaryData.filter((d) => d.LINE_NUMB === lineNum);
+
         // Calculate hours for each mode
-        const sewing = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const idle = lineRows.filter(d => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const noFeeding = lineRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const meeting = lineRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const maintenance = lineRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const rework = lineRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const needleBreak = lineRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        
-        // Calculate total hours for this line
-        const lineHours = sewing + idle + noFeeding + meeting + maintenance + rework + needleBreak;
-        
-        // Get needle runtime data
-        const needleRuntime = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
-        
-        // Calculate productive time percentage for this line
-        const productiveTimePercent = lineHours > 0 ? (sewing / lineHours) * 100 : 0;
-        
-        // Calculate sewing speed data
-        const sewingModeRecords = lineRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
+        const sewing = lineRows
+          .filter((d) => d.MODE === 1)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const idle = lineRows
+          .filter((d) => d.MODE === 2)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const noFeeding = lineRows
+          .filter((d) => d.MODE === 3)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const meeting = lineRows
+          .filter((d) => d.MODE === 4)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const maintenance = lineRows
+          .filter((d) => d.MODE === 5)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const rework = lineRows
+          .filter((d) => d.MODE === 6)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const needleBreak = lineRows
+          .filter((d) => d.MODE === 7)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+
+        // Calculate line total hours
+        const lineHours =
+          sewing +
+          idle +
+          noFeeding +
+          meeting +
+          maintenance +
+          rework +
+          needleBreak;
+
+        // Get needle runtime and SPM data
+        const needleRuntime = lineRows
+          .filter((d) => d.MODE === 1)
+          .reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+        const sewingModeRecords = lineRows.filter(
+          (d) => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null
+        );
         const lineSPM = sewingModeRecords.reduce((sum, d) => {
           const reserve = Number(d.RESERVE) || 0;
           return sum + reserve;
         }, 0);
-        
-        // Add to overall totals
+
+        // Add to totals
         totalSewing += sewing;
         totalHours += lineHours;
         totalNeedleRuntime += needleRuntime;
         totalSPM += lineSPM;
         totalSPMInstances += sewingModeRecords.length;
-        totalProductiveTime += productiveTimePercent; // Sum the percentages (22.22 + 42.86 + 87.5 = 152.58)
       });
-      
-      // Calculate final metrics
-      const sewingSeconds = totalSewing * 3600; // Convert sewing hours to seconds
-      const needleRuntimePercent = sewingSeconds > 0 ? (totalNeedleRuntime / sewingSeconds) * 100 : 0;
-      const sewingSpeed = totalSPMInstances > 0 ? totalSPM / totalSPMInstances : 0;
-      
+
+      // Calculate the overall PT percentage - this is the key fix
+      const productiveTimePercent =
+        totalHours > 0 ? (totalSewing / totalHours) * 100 : 0;
+
+      // Calculate needle runtime percentage
+      const sewingSeconds = totalSewing * 3600;
+      const needleRuntimePercent =
+        sewingSeconds > 0 ? (totalNeedleRuntime / sewingSeconds) * 100 : 0;
+
+      // Calculate sewing speed
+      const sewingSpeed =
+        totalSPMInstances > 0 ? totalSPM / totalSPMInstances : 0;
+
       return {
-        productiveTime: totalProductiveTime, // Return sum of percentages for "Total Productive Time %"
+        productiveTime: productiveTimePercent, // FIXED: Return the calculated percentage
         needleRuntimePercentage: needleRuntimePercent,
         sewingSpeed: sewingSpeed,
-        totalHours: totalHours
+        totalHours: totalHours,
       };
-    }
-    else if (summaryFilter === "operator") {
+    } else if (summaryFilter === "operator") {
       // Group by operator
-      const operatorIDs = [...new Set(nonSummaryData.map(d => d.OPERATOR_ID))];
+      const operatorIDs = [
+        ...new Set(nonSummaryData.map((d) => d.OPERATOR_ID)),
+      ];
       let totalSewing = 0;
       let totalOperatorHours = 0;
       let totalNeedleRuntime = 0;
       let totalSewingSeconds = 0;
       let totalSPM = 0;
       let totalInstances = 0;
-      
+
       // For each operator, calculate their metrics
-      operatorIDs.forEach(opID => {
-        const operatorRows = nonSummaryData.filter(d => d.OPERATOR_ID === opID);
-        
+      operatorIDs.forEach((opID) => {
+        const operatorRows = nonSummaryData.filter(
+          (d) => d.OPERATOR_ID === opID
+        );
+
         // Calculate activity hours
-        const sewing = operatorRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const meeting = operatorRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const noFeeding = operatorRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const maintenance = operatorRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const rework = operatorRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const needleBreak = operatorRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        
+        const sewing = operatorRows
+          .filter((d) => d.MODE === 1)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const meeting = operatorRows
+          .filter((d) => d.MODE === 3)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const noFeeding = operatorRows
+          .filter((d) => d.MODE === 4)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const maintenance = operatorRows
+          .filter((d) => d.MODE === 5)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const rework = operatorRows
+          .filter((d) => d.MODE === 6)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const needleBreak = operatorRows
+          .filter((d) => d.MODE === 7)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+
         // Fixed 10 hours per day per operator
         const operatorHours = 10;
-        
+
         // Calculate needle runtime
-        const needleRuntime = operatorRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
-        
+        const needleRuntime = operatorRows
+          .filter((d) => d.MODE === 1)
+          .reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+
         // Calculate sewing speed
-        const sewingModeRecords = operatorRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
-        const operatorSPM = sewingModeRecords.reduce((sum, d) => sum + (Number(d.RESERVE) || 0), 0);
+        const sewingModeRecords = operatorRows.filter(
+          (d) => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null
+        );
+        const operatorSPM = sewingModeRecords.reduce(
+          (sum, d) => sum + (Number(d.RESERVE) || 0),
+          0
+        );
         const instances = sewingModeRecords.length;
-        
+
         // Add to totals
         totalSewing += sewing;
         totalOperatorHours += operatorHours;
@@ -180,85 +316,28 @@ const ConsolidatedReports = () => {
         totalSPM += operatorSPM;
         totalInstances += instances;
       });
-      
+
       // Calculate final operator metrics
-      const productiveTimePercent = totalOperatorHours > 0 ? (totalSewing / totalOperatorHours) * 100 : 0;
-      const needleRuntimePercent = totalSewingSeconds > 0 ? (totalNeedleRuntime / totalSewingSeconds) * 100 : 0;
+      const productiveTimePercent =
+        totalOperatorHours > 0 ? (totalSewing / totalOperatorHours) * 100 : 0;
+      const needleRuntimePercent =
+        totalSewingSeconds > 0
+          ? (totalNeedleRuntime / totalSewingSeconds) * 100
+          : 0;
       const avgSewingSpeed = totalInstances > 0 ? totalSPM / totalInstances : 0;
-      
+
       return {
         productiveTime: productiveTimePercent, // Use percentage for display
         needleRuntimePercentage: needleRuntimePercent,
         sewingSpeed: avgSewingSpeed,
-        totalHours: totalOperatorHours
-      };
-    }
-    else if (summaryFilter === "machine") {
-      // Get all unique machine IDs
-      const machineIds = [...new Set(nonSummaryData.filter(d => !d.isSummary).map(d => d.MACHINE_ID))];
-      
-      // Initialize aggregated metrics
-      let totalProductiveTime = 0; // This will store sum of percentages (152.58)
-      let totalNeedleRuntime = 0;
-      let totalSewingSpeed = 0;
-      let totalHours = 0;
-      
-      // For each machine, calculate its metrics
-      machineIds.forEach(machineId => {
-        const machineRows = nonSummaryData.filter(d => d.MACHINE_ID === machineId && !d.isSummary);
-        
-        // Calculate hours for each mode
-        const sewing = machineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const idle = machineRows.filter(d => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const meeting = machineRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const noFeeding = machineRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const maintenance = machineRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const rework = machineRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const needleBreak = machineRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        
-        // Calculate machine total hours
-        const machineHours = sewing + idle + meeting + noFeeding + maintenance + rework + needleBreak;
-        
-        // Calculate productive percentage for this machine
-        const productivePercent = machineHours > 0 ? (sewing / machineHours) * 100 : 0;
-        
-        // Calculate needle runtime percentage
-        const sewingSeconds = sewing * 3600;
-        const needleRuntime = machineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
-        const needleRuntimePercent = sewingSeconds > 0 ? (needleRuntime / sewingSeconds) * 100 : 0;
-        
-        // Calculate sewing speed
-        const sewingModeRecords = machineRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
-        const totalSPM = sewingModeRecords.reduce((sum, d) => {
-          const reserve = Number(d.RESERVE) || 0;
-          return sum + reserve;
-        }, 0);
-        const sewingSpeed = sewingModeRecords.length > 0 ? totalSPM / sewingModeRecords.length : 0;
-        
-        // Add to aggregated values
-        totalProductiveTime += productivePercent; // Sum the percentages (22.22 + 42.86 + 87.5 = 152.58)
-        totalNeedleRuntime += needleRuntimePercent;
-        totalSewingSpeed += sewingSpeed;
-        totalHours += machineHours;
-      });
-      
-      // Get the average needle runtime % and sewing speed
-      const machineCount = machineIds.length;
-      const avgNeedleRuntimePercent = machineCount > 0 ? totalNeedleRuntime / machineCount : 0;
-      const avgSewingSpeed = machineCount > 0 ? totalSewingSpeed / machineCount : 0;
-      
-      return {
-        productiveTime: totalProductiveTime, // Sum of all percentages (152.58)
-        needleRuntimePercentage: avgNeedleRuntimePercent, // Average needle runtime (1.62%)
-        sewingSpeed: avgSewingSpeed, // Average sewing speed (23.75)
-        totalHours: totalHours // Sum of all machine hours (9h 20m)
+        totalHours: totalOperatorHours,
       };
     }
     return {
       productiveTime: 0,
       needleRuntimePercentage: 0,
       sewingSpeed: 0,
-      totalHours: 0
+      totalHours: 0,
     };
   };
   const [showFilterPopup, setShowFilterPopup] = useState({
@@ -292,7 +371,7 @@ const ConsolidatedReports = () => {
   const [showSummary, setShowSummary] = useState(false);
   const [summaryDataAvailable, setSummaryDataAvailable] = useState(false);
   const [activeFilters, setActiveFilters] = useState({});
-  const [summaryFilter, setSummaryFilter] = useState("operator"); // new summary filter state
+  const [summaryFilter, setSummaryFilter] = useState("machine");
   const [resetButtonHover, setResetButtonHover] = useState(false);
 
   // Update the formatHoursMinutes function
@@ -307,7 +386,7 @@ const ConsolidatedReports = () => {
     const minutes = Math.round((decimalHours - hours) * 60);
     return `${hours}h${minutes > 0 ? ` ${minutes}m` : ""}`;
   };
-  
+
   // Similarly, update the formatSecondsToHoursMinutes function
   const formatSecondsToHoursMinutes = (seconds) => {
     if (isNaN(seconds) || seconds === null || seconds === undefined) return "-";
@@ -324,40 +403,48 @@ const ConsolidatedReports = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const params = new URLSearchParams();
-      params.append('from_date', fromDate);
-      params.append('to_date', toDate);
-      
-      filters.MACHINE_ID.forEach(id => params.append('machine_id', id));
-      filters.LINE_NUMB.forEach(line => params.append('line_number', line));
-      filters.operator_name.forEach(name => params.append('operator_name', name));
-      
+      params.append("from_date", fromDate);
+      params.append("to_date", toDate);
+
+      filters.MACHINE_ID.forEach((id) => params.append("machine_id", id));
+      filters.LINE_NUMB.forEach((line) => params.append("line_number", line));
+      filters.operator_name.forEach((name) =>
+        params.append("operator_name", name)
+      );
+
       const requestUrl = `${API_URL}?${params.toString()}`;
-      console.log('Fetching data from:', requestUrl); // ADD DEBUG LOG
-    
+      console.log("Fetching data from:", requestUrl); // ADD DEBUG LOG
+
       const response = await fetch(requestUrl);
-      
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      
+
+      if (!response.ok)
+        throw new Error(`HTTP error! status: ${response.status}`);
+
       const data = await response.json();
-      console.log('Received data:', data); // ADD DEBUG LOG
-    
+      console.log("Received data:", data); // ADD DEBUG LOG
+
       if (data && Array.isArray(data.logs)) {
-        let processedData = data.logs.filter(item => {
-          return item.OPERATOR_ID !== 0 && 
-                 item.operator_name && 
-                 !item.operator_name.toLowerCase().includes("unknown");
+        let processedData = data.logs.filter((item) => {
+          return (
+            item.OPERATOR_ID !== 0 &&
+            item.operator_name &&
+            !item.operator_name.toLowerCase().includes("unknown")
+          );
         });
 
         // Ensure duration_hours is present and correct
-        processedData = processedData.map(item => {
-          if (typeof item.duration_hours === 'number' && !isNaN(item.duration_hours)) {
+        processedData = processedData.map((item) => {
+          if (
+            typeof item.duration_hours === "number" &&
+            !isNaN(item.duration_hours)
+          ) {
             return item;
           }
           // Calculate duration_hours from START_TIME and END_TIME if possible
           if (item.START_TIME && item.END_TIME) {
-            const parseTime = t => {
+            const parseTime = (t) => {
               const [h, m, s] = t.split(":").map(Number);
               return h * 3600 + m * 60 + (s || 0);
             };
@@ -371,14 +458,29 @@ const ConsolidatedReports = () => {
         });
 
         // Apply priority-based filtering (Line > Machine > Operator)
-        if (filters.LINE_NUMB.length > 0 && !filters.LINE_NUMB.includes("All")) {
-          processedData = processedData.filter(item => filters.LINE_NUMB.includes(item.LINE_NUMB));
+        if (
+          filters.LINE_NUMB.length > 0 &&
+          !filters.LINE_NUMB.includes("All")
+        ) {
+          processedData = processedData.filter((item) =>
+            filters.LINE_NUMB.includes(item.LINE_NUMB)
+          );
         }
-        if (filters.MACHINE_ID.length > 0 && !filters.MACHINE_ID.includes("All")) {
-          processedData = processedData.filter(item => filters.MACHINE_ID.includes(item.MACHINE_ID));
+        if (
+          filters.MACHINE_ID.length > 0 &&
+          !filters.MACHINE_ID.includes("All")
+        ) {
+          processedData = processedData.filter((item) =>
+            filters.MACHINE_ID.includes(item.MACHINE_ID)
+          );
         }
-        if (filters.operator_name.length > 0 && !filters.operator_name.includes("All")) {
-          processedData = processedData.filter(item => filters.operator_name.includes(item.operator_name));
+        if (
+          filters.operator_name.length > 0 &&
+          !filters.operator_name.includes("All")
+        ) {
+          processedData = processedData.filter((item) =>
+            filters.operator_name.includes(item.operator_name)
+          );
         }
 
         // Add summary rows based on selected filters
@@ -386,38 +488,55 @@ const ConsolidatedReports = () => {
 
         setTableData(processedData);
         setFilteredData(processedData);
-        
+
         if (data.summary) {
           // Apply operator-specific idle hour calculation if operator is selected
           let idleHours = data.summary.idle_hours || 0;
           if (filters.operator_name.length > 0) {
-            idleHours = Math.max(0, 10 - (
-              (data.summary.sewing_hours || 0) +
-              (data.summary.no_feeding_hours || 0) + 
-              (data.summary.meeting_hours || 0) + 
-              (data.summary.maintenance_hours || 0) +
-              (data.summary.rework_hours || 0) +
-              (data.summary.needle_break_hours || 0)
-            ));
+            idleHours = Math.max(
+              0,
+              10 -
+                ((data.summary.sewing_hours || 0) +
+                  (data.summary.no_feeding_hours || 0) +
+                  (data.summary.meeting_hours || 0) +
+                  (data.summary.maintenance_hours || 0) +
+                  (data.summary.rework_hours || 0) +
+                  (data.summary.needle_break_hours || 0))
+            );
           }
-        
+
           // Calculate correct sewing speed for summary - FIXED to handle division by zero
-          const sewingRecords = processedData.filter(d => d.MODE === 1 && !d.isSummary && d.RESERVE !== undefined && d.RESERVE !== null);
-          console.log('Sewing records found:', sewingRecords.length);
-          console.log('Sewing records data:', sewingRecords.map(r => ({ RESERVE: r.RESERVE, MODE: r.MODE })));
-          
+          const sewingRecords = processedData.filter(
+            (d) =>
+              d.MODE === 1 &&
+              !d.isSummary &&
+              d.RESERVE !== undefined &&
+              d.RESERVE !== null
+          );
+          console.log("Sewing records found:", sewingRecords.length);
+          console.log(
+            "Sewing records data:",
+            sewingRecords.map((r) => ({ RESERVE: r.RESERVE, MODE: r.MODE }))
+          );
+
           const totalSPM = sewingRecords.reduce((sum, d) => {
             const reserve = Number(d.RESERVE) || 0;
-            console.log('Adding RESERVE:', reserve);
+            console.log("Adding RESERVE:", reserve);
             return sum + reserve;
           }, 0);
-          
+
           const numberOfInstances = sewingRecords.length;
-          console.log('Total SPM:', totalSPM, 'Number of instances:', numberOfInstances);
-          
-          const correctSewingSpeed = numberOfInstances > 0 ? (totalSPM / numberOfInstances) : 0;
-          console.log('Calculated sewing speed:', correctSewingSpeed);
-        
+          console.log(
+            "Total SPM:",
+            totalSPM,
+            "Number of instances:",
+            numberOfInstances
+          );
+
+          const correctSewingSpeed =
+            numberOfInstances > 0 ? totalSPM / numberOfInstances : 0;
+          console.log("Calculated sewing speed:", correctSewingSpeed);
+
           setSummaryData({
             sewingHours: data.summary.sewing_hours || 0,
             idleHours: idleHours,
@@ -431,7 +550,7 @@ const ConsolidatedReports = () => {
             nptPercent: data.summary.npt_percent || 0,
             sewingSpeed: correctSewingSpeed, // FIXED: Will be 0 instead of Infinity
             stitchCount: data.summary.total_stitch_count || 0,
-            needleRuntime: data.summary.total_needle_runtime || 0
+            needleRuntime: data.summary.total_needle_runtime || 0,
           });
           setSummaryDataAvailable(true);
           setShowSummary(true);
@@ -441,7 +560,7 @@ const ConsolidatedReports = () => {
           to_date: toDate,
           machine_id: filters.MACHINE_ID.join(", ") || "All",
           line_number: filters.LINE_NUMB.join(", ") || "All",
-          operator_name: filters.operator_name.join(", ") || "All"
+          operator_name: filters.operator_name.join(", ") || "All",
         });
       } else {
         throw new Error("Invalid data format received from server");
@@ -784,7 +903,7 @@ const ConsolidatedReports = () => {
   };
 
   // Add these new download functions after the existing downloadCSV function:
-  
+
   const downloadCSV = () => {
     try {
       if (showSummary) {
@@ -797,7 +916,7 @@ const ConsolidatedReports = () => {
       alert("Failed to generate CSV file");
     }
   };
-  
+
   const downloadRawDataCSV = () => {
     const headers = TABLE_HEADS.map((th) => th.label).join(",");
     const rows = filteredData
@@ -817,16 +936,20 @@ const ConsolidatedReports = () => {
       )
       .join("\n");
     const csvContent = `${headers}\n${rows}`;
-  
+
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = "consolidated_report_raw_data.csv";
     link.click();
   };
-  
-  const downloadSummaryCSV = () => {
+
+const downloadSummaryCSV = () => {
+
     let csvContent = "";
+    
+    // Define nonSummaryData here
+    const nonSummaryData = filteredData.filter(d => !d.isSummary);
     
     // Main Summary Table
     const summaryHeaders = [
@@ -847,9 +970,10 @@ const ConsolidatedReports = () => {
       "NPT %",
       "Sewing Speed",
       "Stitch Count",
-      "Needle Runtime"
+      "Needle Runtime",
     ].join(",");
     
+    // Rest of your existing code...
     const summaryRow = [
       `"${activeFilters.from_date || "Start"} to ${activeFilters.to_date || "End"}"`,
       `"${activeFilters.OPERATOR_ID || "All"}"`,
@@ -868,131 +992,175 @@ const ConsolidatedReports = () => {
       `"${Number(summaryData.nptPercent || 0).toFixed(2)}%"`,
       `"${Number(summaryData.sewingSpeed || 0).toFixed(2)}"`,
       `"${Number(summaryData.stitchCount || 0).toFixed(2)}"`,
-      `"${Number(summaryData.needleRuntime || 0).toFixed(2)}"`
+      `"${Number(summaryData.needleRuntime || 0).toFixed(2)}"`,
     ].join(",");
-    
+
     csvContent += "MAIN SUMMARY REPORT\n";
     csvContent += summaryHeaders + "\n";
     csvContent += summaryRow + "\n\n";
-    
-    // Per-ID Summary Tables based on current filter
-     // Replace the operator CSV section (around lines 839-857):
-    // ...existing code...
+
     if (summaryFilter === "operator") {
-      // Group by operator and calculate their aggregated metrics
-      const operatorGroups = {};
-      nonSummaryData.forEach(item => {
-        const key = item.OPERATOR_ID;
-        if (!operatorGroups[key]) {
-          operatorGroups[key] = {
-            sewingHours: 0,
-            totalHours: 10, // Fixed 10 hours per operator per day
-            needleRuntime: 0,
-            sewingSeconds: 0,
-            totalSPM: 0,
-            numberOfInstances: 0
-          };
-        }
+      csvContent += "OPERATOR ID SUMMARY\n";
+      csvContent += "Operator ID,Operator Name,Total Hours,Sewing,Idle,Meeting,No Feeding,Maintenance,Rework,Needle Break,Productive %,Non-Productive %,Needle Runtime %,Sewing Speed,Stitch Count\n";
+      
+      // Group operators by ID
+      [...new Set(nonSummaryData.map(d => d.OPERATOR_ID))].forEach(operatorId => {
+        const operatorRows = nonSummaryData.filter(d => d.OPERATOR_ID === operatorId);
+        const operatorName = operatorRows[0]?.operator_name || "Unknown";
         
-        const sewingHours = item.MODE === 1 ? (item.duration_hours || 0) : 0;
-        operatorGroups[key].sewingHours += sewingHours;
-        operatorGroups[key].sewingSeconds += sewingHours * 3600;
+        // Calculate hours for each mode
+        const sewing = operatorRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const idle = operatorRows.filter(d => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const meeting = operatorRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const noFeeding = operatorRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const maintenance = operatorRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const rework = operatorRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const needleBreak = operatorRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
         
-        // FIXED: Only count needle runtime for sewing mode (MODE 1)
-        if (item.MODE === 1) {
-          operatorGroups[key].needleRuntime += item.NEEDLE_RUNTIME || 0;
-        }
+        // Calculate total hours (fixed 10 hours per day for operators)
+        const totalHours = 10;
         
-        // For sewing mode records, add to SPM calculation - FIXED
-        if (item.MODE === 1 && item.RESERVE !== undefined && item.RESERVE !== null) {
-          const reserve = Number(item.RESERVE) || 0;
-          if (reserve > 0) { // Only count meaningful sewing speeds
-            operatorGroups[key].totalSPM += reserve;
-            operatorGroups[key].numberOfInstances += 1;
-          }
-        }
+        // Calculate percentages
+        const productivePercent = totalHours > 0 ? ((sewing / totalHours) * 100).toFixed(2) : "0.00";
+        const nonProductivePercent = totalHours > 0 ? (((idle + meeting + noFeeding + maintenance + rework + needleBreak) / totalHours) * 100).toFixed(2) : "0.00";
+        
+        // Calculate needle runtime percentage
+        const sewingSeconds = sewing * 3600;
+        const needleRuntime = operatorRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+        const needleRuntimePercent = sewingSeconds > 0 ? ((needleRuntime / sewingSeconds) * 100).toFixed(2) : "0.00";
+        
+        // Calculate sewing speed
+        const sewingModeRecords = operatorRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
+        const totalSPM = sewingModeRecords.reduce((sum, d) => sum + (Number(d.RESERVE) || 0), 0);
+        const sewingSpeed = sewingModeRecords.length > 0 ? (totalSPM / sewingModeRecords.length).toFixed(2) : "0.00";
+        
+        // Calculate stitch count
+        const totalStitches = operatorRows.reduce((sum, d) => sum + (d.STITCH_COUNT || 0), 0);
+        
+        csvContent += `"${operatorId}","${operatorName}","${formatHoursMinutes(totalHours)}","${formatHoursMinutes(sewing)}","${formatHoursMinutes(idle)}","${formatHoursMinutes(meeting)}","${formatHoursMinutes(noFeeding)}","${formatHoursMinutes(maintenance)}","${formatHoursMinutes(rework)}","${formatHoursMinutes(needleBreak)}","${productivePercent}%","${nonProductivePercent}%","${needleRuntimePercent}%","${sewingSpeed}","${totalStitches}"\n`;
       });
-    
-      const operators = Object.values(operatorGroups);
-      const totalOperators = operators.length;
       
-      // CHANGED: Calculate totals instead of averages for summary tiles
-      const totalProductiveHours = operators.reduce((sum, op) => sum + op.sewingHours, 0);
-      const totalHours = operators.reduce((sum, op) => sum + op.totalHours, 0);
-      const totalNeedleRuntime = operators.reduce((sum, op) => sum + op.needleRuntime, 0);
-      const totalSewingSeconds = operators.reduce((sum, op) => sum + op.sewingSeconds, 0);
-      
-      // Calculate total sewing speed (sum of all individual speeds)
-      const totalSewingSpeed = operators.reduce((sum, op) => {
-        const speed = op.numberOfInstances > 0 ? (op.totalSPM / op.numberOfInstances) : 0;
-        return sum + speed;
-      }, 0);
-      
-      return {
-        productiveTime: totalProductiveHours, // CHANGED: Show total hours instead of percentage
-        needleRuntimePercentage: totalSewingSeconds > 0 ? totalNeedleRuntime / totalSewingSeconds * 100 : 0, // Keep as percentage but calculated from totals
-        sewingSpeed: totalSewingSpeed, // CHANGED: Show total speed instead of average
-        totalHours: totalHours // This stays the same (total hours)
-      };
+      csvContent += "\n";
     }
-    // ...existing code...
     if (summaryFilter === "machine") {
       csvContent += "MACHINE ID SUMMARY\n";
-      csvContent += "Machine ID,Total Hours,Sewing,Idle,Meeting,No Feeding,Maintenance,Rework,Needle Break,Productive %,Non-Productive %\n";
+      csvContent += "Machine ID,Total Hours,Sewing,Idle,Meeting,No Feeding,Maintenance,Rework,Needle Break,Productive %,Non-Productive %,Needle Runtime %,Sewing Speed,Stitch Count\n";
+
+      const nonSummaryData = filteredData.filter(d => !d.isSummary);
       
-      [...new Set(filteredData.filter((d) => !d.isSummary).map((d) => d.MACHINE_ID))].forEach((machineId) => {
-        const machineRows = filteredData.filter((d) => d.MACHINE_ID === machineId && !d.isSummary);
-               // Replace in createSummaryRow function
-        const sewing = data
-          .filter((d) => d.MODE === 1)
+      [...new Set(nonSummaryData.map(d => d.MACHINE_ID))].forEach((machineId) => {
+        const machineRows = nonSummaryData.filter(d => d.MACHINE_ID === machineId);
+        
+        // Calculate hours for each mode
+        const sewing = machineRows
+          .filter(d => d.MODE === 1)
           .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const idle = data
-          .filter((d) => d.MODE === 2)
+        const idle = machineRows
+          .filter(d => d.MODE === 2)
           .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-         
-        // Replace fixed 10 hours with calculated sum
-        const totalHours = sewing + idle + meeting + noFeeding + maintenance + rework + needleBreak;      // Replace these calculations in createSummaryRow function
-        const noFeeding = data
-          .filter((d) => d.MODE === 3)  // Changed from 4 to 3
+        const meeting = machineRows
+          .filter(d => d.MODE === 3)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const noFeeding = machineRows
+          .filter(d => d.MODE === 4)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const maintenance = machineRows
+          .filter(d => d.MODE === 5)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const rework = machineRows
+          .filter(d => d.MODE === 6)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const needleBreak = machineRows
+          .filter(d => d.MODE === 7)
           .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
         
-        const meeting = data
-          .filter((d) => d.MODE === 4)  // Changed from 3 to 4
-          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        // Calculate total hours based on actual data
+        const totalHours = sewing + idle + meeting + noFeeding + maintenance + rework + needleBreak;
         
-        const maintenance = machineRows.filter((d) => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const rework = machineRows.filter((d) => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const needleBreak = machineRows.filter((d) => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const productivePercent = ((sewing / totalHours) * 100).toFixed(2);
-        const nonProductivePercent = (((idle + meeting + noFeeding + maintenance + rework + needleBreak) / totalHours) * 100).toFixed(2);
+        // Calculate percentages
+        const productivePercent = totalHours > 0 ? ((sewing / totalHours) * 100).toFixed(2) : "0.00";
+        const nonProductivePercent = totalHours > 0 ? (((idle + meeting + noFeeding + maintenance + rework + needleBreak) / totalHours) * 100).toFixed(2) : "0.00";
         
-        csvContent += `"${machineId}","${formatHoursMinutes(totalHours)}","${formatHoursMinutes(sewing)}","${formatHoursMinutes(idle)}","${formatHoursMinutes(meeting)}","${formatHoursMinutes(noFeeding)}","${formatHoursMinutes(maintenance)}","${formatHoursMinutes(rework)}","${formatHoursMinutes(needleBreak)}","${productivePercent}%","${nonProductivePercent}%"\n`;
+        // Calculate needle runtime percentage
+        const sewingSeconds = sewing * 3600;
+        const needleRuntime = machineRows
+          .filter(d => d.MODE === 1)
+          .reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+        const needleRuntimePercent = sewingSeconds > 0 ? ((needleRuntime / sewingSeconds) * 100).toFixed(2) : "0.00";
+        
+        // Calculate sewing speed
+        const sewingModeRecords = machineRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
+        const totalSPM = sewingModeRecords.reduce((sum, d) => sum + (Number(d.RESERVE) || 0), 0);
+        const sewingSpeed = sewingModeRecords.length > 0 ? (totalSPM / sewingModeRecords.length).toFixed(2) : "0.00";
+        
+        // Calculate stitch count
+        const totalStitches = machineRows.reduce((sum, d) => sum + (d.STITCH_COUNT || 0), 0);
+        
+        csvContent += `"${machineId}","${formatHoursMinutes(totalHours)}","${formatHoursMinutes(sewing)}","${formatHoursMinutes(idle)}","${formatHoursMinutes(meeting)}","${formatHoursMinutes(noFeeding)}","${formatHoursMinutes(maintenance)}","${formatHoursMinutes(rework)}","${formatHoursMinutes(needleBreak)}","${productivePercent}%","${nonProductivePercent}%","${needleRuntimePercent}%","${sewingSpeed}","${totalStitches}"\n`;
       });
+      
       csvContent += "\n";
     }
-    
     if (summaryFilter === "line") {
       csvContent += "LINE NUMBER SUMMARY\n";
-      csvContent += "Line Number,Total Hours,Sewing,Idle,Meeting,No Feeding,Maintenance,Rework,Needle Break,Productive %,Non-Productive %\n";
+      csvContent += "Line Number,Total Hours,Sewing,Idle,Meeting,No Feeding,Maintenance,Rework,Needle Break,Productive %,Non-Productive %,Needle Runtime %,Sewing Speed,Stitch Count\n";
+
+      const nonSummaryData = filteredData.filter(d => !d.isSummary);
       
-      [...new Set(filteredData.filter(d => !d.isSummary).map(d => d.LINE_NUMB))].forEach((lineNum) => {
-        const lineRows = filteredData.filter(d => d.LINE_NUMB === lineNum && !d.isSummary);
-        const totalHours = 10;
-        const sewing = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const idle = lineRows.filter(d => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const meeting = lineRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const noFeeding = lineRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const maintenance = lineRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const rework = lineRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const needleBreak = lineRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-        const productivePercent = ((sewing / totalHours) * 100).toFixed(2);
-        const nonProductivePercent = (((idle + meeting + noFeeding + maintenance + rework + needleBreak) / totalHours) * 100).toFixed(2);
+      [...new Set(nonSummaryData.map(d => d.LINE_NUMB))].forEach((lineNum) => {
+        const lineRows = nonSummaryData.filter(d => d.LINE_NUMB === lineNum);
         
-        csvContent += `"${lineNum}","${formatHoursMinutes(totalHours)}","${formatHoursMinutes(sewing)}","${formatHoursMinutes(idle)}","${formatHoursMinutes(meeting)}","${formatHoursMinutes(noFeeding)}","${formatHoursMinutes(maintenance)}","${formatHoursMinutes(rework)}","${formatHoursMinutes(needleBreak)}","${productivePercent}%","${nonProductivePercent}%"\n`;
+        // Calculate hours for each mode
+        const sewing = lineRows
+          .filter(d => d.MODE === 1)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const idle = lineRows
+          .filter(d => d.MODE === 2)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const meeting = lineRows
+          .filter(d => d.MODE === 3)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const noFeeding = lineRows
+          .filter(d => d.MODE === 4)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const maintenance = lineRows
+          .filter(d => d.MODE === 5)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const rework = lineRows
+          .filter(d => d.MODE === 6)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        const needleBreak = lineRows
+          .filter(d => d.MODE === 7)
+          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+        
+        // Calculate total hours
+        const totalHours = sewing + idle + meeting + noFeeding + maintenance + rework + needleBreak;
+        
+        // Calculate percentages
+        const productivePercent = totalHours > 0 ? ((sewing / totalHours) * 100).toFixed(2) : "0.00";
+        const nonProductivePercent = totalHours > 0 ? (((idle + meeting + noFeeding + maintenance + rework + needleBreak) / totalHours) * 100).toFixed(2) : "0.00";
+        
+        // Calculate needle runtime percentage
+        const sewingSeconds = sewing * 3600;
+        const needleRuntime = lineRows
+          .filter(d => d.MODE === 1)
+          .reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+        const needleRuntimePercent = sewingSeconds > 0 ? ((needleRuntime / sewingSeconds) * 100).toFixed(2) : "0.00";
+        
+        // Calculate sewing speed
+        const sewingModeRecords = lineRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
+        const totalSPM = sewingModeRecords.reduce((sum, d) => sum + (Number(d.RESERVE) || 0), 0);
+        const sewingSpeed = sewingModeRecords.length > 0 ? (totalSPM / sewingModeRecords.length).toFixed(2) : "0.00";
+        
+        // Calculate stitch count
+        const totalStitches = lineRows.reduce((sum, d) => sum + (d.STITCH_COUNT || 0), 0);
+        
+        csvContent += `"${lineNum}","${formatHoursMinutes(totalHours)}","${formatHoursMinutes(sewing)}","${formatHoursMinutes(idle)}","${formatHoursMinutes(meeting)}","${formatHoursMinutes(noFeeding)}","${formatHoursMinutes(maintenance)}","${formatHoursMinutes(rework)}","${formatHoursMinutes(needleBreak)}","${productivePercent}%","${nonProductivePercent}%","${needleRuntimePercent}%","${sewingSpeed}","${totalStitches}"\n`;
       });
+      
       csvContent += "\n";
     }
-    
+
     // Aggregated Metrics
     csvContent += "AGGREGATED METRICS\n";
     csvContent += "Metric,Value\n";
@@ -1000,15 +1168,14 @@ const ConsolidatedReports = () => {
     csvContent += `"Needle Runtime Percentage","${calculateAggregatedMetrics().needleRuntimePercentage.toFixed(2)}%"\n`;
     csvContent += `"Sewing Speed","${calculateAggregatedMetrics().sewingSpeed.toFixed(0)}"\n`;
     csvContent += `"Total Hours","${formatHoursMinutes(calculateAggregatedMetrics().totalHours)}"\n`;
-  
+
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = "consolidated_report_summary.csv";
     link.click();
-  };
-  
-  const downloadHTML = () => {
+  } 
+const downloadHTML = () => {
     try {
       if (showSummary) {
         downloadSummaryHTML();
@@ -1020,7 +1187,7 @@ const ConsolidatedReports = () => {
       alert("Failed to generate HTML file");
     }
   };
-  
+
   const downloadRawDataHTML = () => {
     const htmlContent = `
   <!DOCTYPE html>
@@ -1041,50 +1208,60 @@ const ConsolidatedReports = () => {
       <div class="header">
           <h1>Consolidated Report - Raw Data</h1>
           <div class="info">
-              <p><strong>Date Range:</strong> ${activeFilters.from_date || "Start"} to ${activeFilters.to_date || "End"}</p>
+              <p><strong>Date Range:</strong> ${
+                activeFilters.from_date || "Start"
+              } to ${activeFilters.to_date || "End"}</p>
               <p><strong>Generated on:</strong> ${new Date().toLocaleString()}</p>
-              <p><strong>Total Records:</strong> ${filteredData.filter(item => !item.isSummary).length}</p>
+              <p><strong>Total Records:</strong> ${
+                filteredData.filter((item) => !item.isSummary).length
+              }</p>
           </div>
       </div>
       
       <table>
           <thead>
               <tr>
-                  ${TABLE_HEADS.map(th => `<th>${th.label}</th>`).join('')}
+                  ${TABLE_HEADS.map((th) => `<th>${th.label}</th>`).join("")}
               </tr>
           </thead>
           <tbody>
               ${filteredData
-                .filter(item => !item.isSummary)
-                .map((item, index) => `
+                .filter((item) => !item.isSummary)
+                .map(
+                  (item, index) => `
                   <tr>
-                      ${TABLE_HEADS.map(th => {
+                      ${TABLE_HEADS.map((th) => {
                         let value;
                         if (th.key === "index") {
                           value = index + 1;
                         } else if (th.key === "created_at") {
                           value = formatDateTime(item[th.key]);
-                        } else if (th.key === "NEEDLE_RUNTIME" || th.key === "NEEDLE_STOPTIME") {
+                        } else if (
+                          th.key === "NEEDLE_RUNTIME" ||
+                          th.key === "NEEDLE_STOPTIME"
+                        ) {
                           value = formatSecondsToHoursMinutes(item[th.key]);
                         } else {
                           value = item[th.key] || "-";
                         }
                         return `<td>${value}</td>`;
-                      }).join('')}
+                      }).join("")}
                   </tr>
-                `).join('')}
+                `
+                )
+                .join("")}
           </tbody>
       </table>
   </body>
   </html>`;
-  
+
     const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = "consolidated_report_raw_data.html";
     link.click();
   };
-  
+
   const downloadSummaryHTML = () => {
     const generatePerIDHTML = () => {
       if (summaryFilter === "operator") {
@@ -1109,21 +1286,59 @@ const ConsolidatedReports = () => {
                     </tr>
                 </thead>
                 <tbody>
-                    ${[...new Set(filteredData.filter((d) => !d.isSummary).map((d) => d.OPERATOR_ID))]
+                    ${[
+                      ...new Set(
+                        filteredData
+                          .filter((d) => !d.isSummary)
+                          .map((d) => d.OPERATOR_ID)
+                      ),
+                    ]
                       .map((operatorId) => {
-                        const operatorRows = filteredData.filter((d) => d.OPERATOR_ID === operatorId && !d.isSummary);
-                        const operatorName = operatorRows[0]?.operator_name || "-";
+                        const operatorRows = filteredData.filter(
+                          (d) => d.OPERATOR_ID === operatorId && !d.isSummary
+                        );
+                        const operatorName =
+                          operatorRows[0]?.operator_name || "-";
                         const totalHours = 10;
-                        const sewing = operatorRows.filter((d) => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const idle = operatorRows.filter((d) => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const meeting = operatorRows.filter((d) => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const noFeeding = operatorRows.filter((d) => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const maintenance = operatorRows.filter((d) => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const rework = operatorRows.filter((d) => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const needleBreak = operatorRows.filter((d) => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const productivePercent = totalHours > 0 ? ((sewing / totalHours) * 100).toFixed(2) : "0.00";
-                        const nonProductivePercent = totalHours > 0 ? (((idle + meeting + noFeeding + maintenance + rework + needleBreak) / totalHours) * 100).toFixed(2) : "0.00";
-                        
+                        const sewing = operatorRows
+                          .filter((d) => d.MODE === 1)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const idle = operatorRows
+                          .filter((d) => d.MODE === 2)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const meeting = operatorRows
+                          .filter((d) => d.MODE === 3)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const noFeeding = operatorRows
+                          .filter((d) => d.MODE === 4)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const maintenance = operatorRows
+                          .filter((d) => d.MODE === 5)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const rework = operatorRows
+                          .filter((d) => d.MODE === 6)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const needleBreak = operatorRows
+                          .filter((d) => d.MODE === 7)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const productivePercent =
+                          totalHours > 0
+                            ? ((sewing / totalHours) * 100).toFixed(2)
+                            : "0.00";
+                        const nonProductivePercent =
+                          totalHours > 0
+                            ? (
+                                ((idle +
+                                  meeting +
+                                  noFeeding +
+                                  maintenance +
+                                  rework +
+                                  needleBreak) /
+                                  totalHours) *
+                                100
+                              ).toFixed(2)
+                            : "0.00";
+
                         return `
                           <tr>
                             <td>${operatorId}</td>
@@ -1140,7 +1355,8 @@ const ConsolidatedReports = () => {
                             <td>${nonProductivePercent}%</td>
                           </tr>
                         `;
-                      }).join('')}
+                      })
+                      .join("")}
                 </tbody>
             </table>
         </div>
@@ -1166,20 +1382,54 @@ const ConsolidatedReports = () => {
                     </tr>
                 </thead>
                 <tbody>
-                    ${[...new Set(filteredData.filter((d) => !d.isSummary).map((d) => d.MACHINE_ID))]
+                    ${[
+                      ...new Set(
+                        filteredData
+                          .filter((d) => !d.isSummary)
+                          .map((d) => d.MACHINE_ID)
+                      ),
+                    ]
                       .map((machineId) => {
-                        const machineRows = filteredData.filter((d) => d.MACHINE_ID === machineId && !d.isSummary);
+                        const machineRows = filteredData.filter(
+                          (d) => d.MACHINE_ID === machineId && !d.isSummary
+                        );
                         const totalHours = 10;
-                        const sewing = machineRows.filter((d) => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const idle = machineRows.filter((d) => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const meeting = machineRows.filter((d) => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const noFeeding = machineRows.filter((d) => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const maintenance = machineRows.filter((d) => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const rework = machineRows.filter((d) => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const needleBreak = machineRows.filter((d) => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                        const productivePercent = ((sewing / totalHours) * 100).toFixed(2);
-                        const nonProductivePercent = (((idle + meeting + noFeeding + maintenance + rework + needleBreak) / totalHours) * 100).toFixed(2);
-                        
+                        const sewing = machineRows
+                          .filter((d) => d.MODE === 1)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const idle = machineRows
+                          .filter((d) => d.MODE === 2)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const meeting = machineRows
+                          .filter((d) => d.MODE === 3)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const noFeeding = machineRows
+                          .filter((d) => d.MODE === 4)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const maintenance = machineRows
+                          .filter((d) => d.MODE === 5)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const rework = machineRows
+                          .filter((d) => d.MODE === 6)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const needleBreak = machineRows
+                          .filter((d) => d.MODE === 7)
+                          .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+                        const productivePercent = (
+                          (sewing / totalHours) *
+                          100
+                        ).toFixed(2);
+                        const nonProductivePercent = (
+                          ((idle +
+                            meeting +
+                            noFeeding +
+                            maintenance +
+                            rework +
+                            needleBreak) /
+                            totalHours) *
+                          100
+                        ).toFixed(2);
+
                         return `
                           <tr>
                             <td>${machineId}</td>
@@ -1195,75 +1445,112 @@ const ConsolidatedReports = () => {
                             <td>${nonProductivePercent}%</td>
                           </tr>
                         `;
-                      }).join('')}
+                      })
+                      .join("")}
                 </tbody>
             </table>
         </div>
         `;
-      } 
-      else if (summaryFilter === "line") {
-        const lineNumbers = [...new Set(nonSummaryData.filter(d => !d.isSummary).map(d => d.LINE_NUMB))];
-        
+      } else if (summaryFilter === "line") {
+        const lineNumbers = [
+          ...new Set(
+            nonSummaryData.filter((d) => !d.isSummary).map((d) => d.LINE_NUMB)
+          ),
+        ];
+
         // Initialize aggregated metrics
         let totalProductiveTimeSum = 0; // Will store sum of percentages like machine view
         let totalNeedleRuntime = 0;
         let totalSewingSpeed = 0;
         let totalHours = 0;
-        
+
         // For each line, calculate its metrics
-        lineNumbers.forEach(lineNum => {
-          const lineRows = nonSummaryData.filter(d => d.LINE_NUMB === lineNum && !d.isSummary);
-          
+        lineNumbers.forEach((lineNum) => {
+          const lineRows = nonSummaryData.filter(
+            (d) => d.LINE_NUMB === lineNum && !d.isSummary
+          );
+
           // Calculate hours for each mode
-          const sewing = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-          const idle = lineRows.filter(d => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-          const meeting = lineRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-          const noFeeding = lineRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-          const maintenance = lineRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-          const rework = lineRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-          const needleBreak = lineRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-          
+          const sewing = lineRows
+            .filter((d) => d.MODE === 1)
+            .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          const idle = lineRows
+            .filter((d) => d.MODE === 2)
+            .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          const meeting = lineRows
+            .filter((d) => d.MODE === 3)
+            .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          const noFeeding = lineRows
+            .filter((d) => d.MODE === 4)
+            .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          const maintenance = lineRows
+            .filter((d) => d.MODE === 5)
+            .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          const rework = lineRows
+            .filter((d) => d.MODE === 6)
+            .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+          const needleBreak = lineRows
+            .filter((d) => d.MODE === 7)
+            .reduce((sum, d) => sum + (d.duration_hours || 0), 0);
+
           // Calculate line total hours
-          const lineHours = sewing + idle + meeting + noFeeding + maintenance + rework + needleBreak;
-          
+          const lineHours =
+            sewing +
+            idle +
+            meeting +
+            noFeeding +
+            maintenance +
+            rework +
+            needleBreak;
+
           // Calculate productive percentage for this line
-          const productivePercent = lineHours > 0 ? (sewing / lineHours) * 100 : 0;
-          
+          const productivePercent =
+            lineHours > 0 ? (sewing / lineHours) * 100 : 0;
+
           // Calculate needle runtime percentage
           const sewingSeconds = sewing * 3600;
-          const needleRuntime = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
-          const needleRuntimePercent = sewingSeconds > 0 ? (needleRuntime / sewingSeconds) * 100 : 0;
-          
+          const needleRuntime = lineRows
+            .filter((d) => d.MODE === 1)
+            .reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
+          const needleRuntimePercent =
+            sewingSeconds > 0 ? (needleRuntime / sewingSeconds) * 100 : 0;
+
           // Calculate sewing speed
-          const sewingModeRecords = lineRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
+          const sewingModeRecords = lineRows.filter(
+            (d) => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null
+          );
           const totalSPM = sewingModeRecords.reduce((sum, d) => {
             const reserve = Number(d.RESERVE) || 0;
             return sum + reserve;
           }, 0);
-          const sewingSpeed = sewingModeRecords.length > 0 ? totalSPM / sewingModeRecords.length : 0;
-          
+          const sewingSpeed =
+            sewingModeRecords.length > 0
+              ? totalSPM / sewingModeRecords.length
+              : 0;
+
           // Add to totals - sum percentages
           totalProductiveTimeSum += productivePercent; // Sum of percentages
           totalNeedleRuntime += needleRuntimePercent;
           totalSewingSpeed += sewingSpeed;
           totalHours += lineHours;
         });
-        
+
         // Calculate averages for display
         const lineCount = lineNumbers.length;
-        const avgNeedleRuntimePercent = lineCount > 0 ? totalNeedleRuntime / lineCount : 0;
+        const avgNeedleRuntimePercent =
+          lineCount > 0 ? totalNeedleRuntime / lineCount : 0;
         const avgSewingSpeed = lineCount > 0 ? totalSewingSpeed / lineCount : 0;
-        
+
         return {
           productiveTime: totalProductiveTimeSum, // Sum of percentages
           needleRuntimePercentage: avgNeedleRuntimePercent,
           sewingSpeed: avgSewingSpeed,
-          totalHours: totalHours
+          totalHours: totalHours,
         };
       }
       return "";
     };
-  
+
     const htmlContent = `
   <!DOCTYPE html>
   <html>
@@ -1288,27 +1575,39 @@ const ConsolidatedReports = () => {
       <div class="header">
           <h1>Consolidated Report - Summary Dashboard</h1>
           <div class="info">
-              <p><strong>Date Range:</strong> ${activeFilters.from_date || "Start"} to ${activeFilters.to_date || "End"}</p>
+              <p><strong>Date Range:</strong> ${
+                activeFilters.from_date || "Start"
+              } to ${activeFilters.to_date || "End"}</p>
               <p><strong>Generated on:</strong> ${new Date().toLocaleString()}</p>
-              <p><strong>Summary Filter:</strong> ${summaryFilter.charAt(0).toUpperCase() + summaryFilter.slice(1)}</p>
+              <p><strong>Summary Filter:</strong> ${
+                summaryFilter.charAt(0).toUpperCase() + summaryFilter.slice(1)
+              }</p>
           </div>
       </div>
   
       <div class="metrics">
           <div class="metric-box">
-              <div class="metric-value">${calculateAggregatedMetrics().productiveTime.toFixed(2)}%</div>
+              <div class="metric-value">${calculateAggregatedMetrics().productiveTime.toFixed(
+                2
+              )}%</div>
               <div class="metric-label">Productive Time</div>
           </div>
           <div class="metric-box">
-              <div class="metric-value">${calculateAggregatedMetrics().needleRuntimePercentage.toFixed(2)}%</div>
+              <div class="metric-value">${calculateAggregatedMetrics().needleRuntimePercentage.toFixed(
+                2
+              )}%</div>
               <div class="metric-label">Needle Runtime %</div>
           </div>
           <div class="metric-box">
-              <div class="metric-value">${calculateAggregatedMetrics().sewingSpeed.toFixed(0)}</div>
+              <div class="metric-value">${calculateAggregatedMetrics().sewingSpeed.toFixed(
+                0
+              )}</div>
               <div class="metric-label">Sewing Speed</div>
           </div>
           <div class="metric-box">
-              <div class="metric-value">${formatHoursMinutes(calculateAggregatedMetrics().totalHours)}</div>
+              <div class="metric-value">${formatHoursMinutes(
+                calculateAggregatedMetrics().totalHours
+              )}</div>
               <div class="metric-label">Total Hours</div>
           </div>
       </div>
@@ -1340,7 +1639,9 @@ const ConsolidatedReports = () => {
               </thead>
               <tbody>
                   <tr>
-                      <td>${activeFilters.from_date || "Start"} to ${activeFilters.to_date || "End"}</td>
+                      <td>${activeFilters.from_date || "Start"} to ${
+      activeFilters.to_date || "End"
+    }</td>
                       <td>${activeFilters.OPERATOR_ID || "All"}</td>
                       <td>${activeFilters.operator_name || "All"}</td>
                       <td>${activeFilters.machine_id || "All"}</td>
@@ -1350,14 +1651,28 @@ const ConsolidatedReports = () => {
                       <td>${formatHoursMinutes(summaryData.idleHours)}</td>
                       <td>${formatHoursMinutes(summaryData.meetingHours)}</td>
                       <td>${formatHoursMinutes(summaryData.noFeedingHours)}</td>
-                      <td>${formatHoursMinutes(summaryData.maintenanceHours)}</td>
+                      <td>${formatHoursMinutes(
+                        summaryData.maintenanceHours
+                      )}</td>
                       <td>${formatHoursMinutes(summaryData.reworkHours)}</td>
-                      <td>${formatHoursMinutes(summaryData.needleBreakHours)}</td>
-                      <td>${Number(summaryData.productiveTimePercent || 0).toFixed(2)}%</td>
-                      <td>${Number(summaryData.nptPercent || 0).toFixed(2)}%</td>
-                      <td>${Number(summaryData.sewingSpeed || 0).toFixed(2)}</td>
-                      <td>${Number(summaryData.stitchCount || 0).toFixed(2)}</td>
-                      <td>${Number(summaryData.needleRuntime || 0).toFixed(2)}</td>
+                      <td>${formatHoursMinutes(
+                        summaryData.needleBreakHours
+                      )}</td>
+                      <td>${Number(
+                        summaryData.productiveTimePercent || 0
+                      ).toFixed(2)}%</td>
+                      <td>${Number(summaryData.nptPercent || 0).toFixed(
+                        2
+                      )}%</td>
+                      <td>${Number(summaryData.sewingSpeed || 0).toFixed(
+                        2
+                      )}</td>
+                      <td>${Number(summaryData.stitchCount || 0).toFixed(
+                        2
+                      )}</td>
+                      <td>${Number(summaryData.needleRuntime || 0).toFixed(
+                        2
+                      )}</td>
                   </tr>
               </tbody>
           </table>
@@ -1366,16 +1681,15 @@ const ConsolidatedReports = () => {
       ${generatePerIDHTML()}
   </body>
   </html>`;
-  
+
     const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = "consolidated_report_summary.html";
     link.click();
   };
-  
+
   // Also wrap the return statement properly. Replace the current return section with:
-  
 
   const removeFilter = (filterType, value) => {
     const updatedFilterValues = filters[filterType].filter(
@@ -1526,7 +1840,7 @@ const ConsolidatedReports = () => {
 
   // --- ensure default summaryFilter is 'operator' and summary table is shown by default ---
   useEffect(() => {
-    setSummaryFilter("operator");
+    setSummaryFilter("machine");
   }, []);
 
   return (
@@ -1553,10 +1867,9 @@ const ConsolidatedReports = () => {
               gap: "16px",
             }}
           >
-            
             <div className="filter-group" style={{ minWidth: "160px" }}>
               <label>From Date</label>
-               <FaCalendarAlt className="calendar-icon" />
+              <FaCalendarAlt className="calendar-icon" />
               <input
                 type="date"
                 value={fromDate}
@@ -1566,7 +1879,7 @@ const ConsolidatedReports = () => {
             </div>
             <div className="filter-group" style={{ minWidth: "160px" }}>
               <label>To Date</label>
-               <FaCalendarAlt className="calendar-icon" />
+              <FaCalendarAlt className="calendar-icon" />
               <input
                 type="date"
                 value={toDate}
@@ -1574,28 +1887,28 @@ const ConsolidatedReports = () => {
                 style={{ width: "100%" }}
               />
             </div>
-                <div className="filter-group" style={{ minWidth: "160px" }}>
-                  <label>Select Filter</label>
-                  <div
-                    className={`filter-value-display clickable`}
-                    onClick={() =>
-                      setShowFilterPopup({
-                        show: true,
-                        type: "summaryFilter",
-                        options: [
-                          { label: "Operator", value: "operator" },
-                          { label: "Machine", value: "machine" },
-                          { label: "Line", value: "line" },
-                        ],
-                        selectedValues: [summaryFilter],
-                      })
-                    }
-                    style={{ width: "100%" }}
-                  >
-                    {summaryFilter.charAt(0).toUpperCase() +
-                      summaryFilter.slice(1)}
-                  </div>
-                </div>
+            <div className="filter-group" style={{ minWidth: "160px" }}>
+              <label>Select Filter</label>
+              <div
+                className={`filter-value-display clickable`}
+                onClick={() =>
+                  setShowFilterPopup({
+                    show: true,
+                    type: "summaryFilter",
+                    options: [
+                      { label: "Machine", value: "machine" },
+
+                      { label: "Operator", value: "operator" },
+                      { label: "Line", value: "line" },
+                    ],
+                    selectedValues: [summaryFilter],
+                  })
+                }
+                style={{ width: "100%" }}
+              >
+                {summaryFilter.charAt(0).toUpperCase() + summaryFilter.slice(1)}
+              </div>
+            </div>
             <button
               className="generate-button green-button"
               onClick={fetchData}
@@ -1603,14 +1916,13 @@ const ConsolidatedReports = () => {
             >
               <FaChartBar /> Generate
             </button>
-            
-            
+
             <button
               className="action-button reset-button"
-              style={{ 
-                backgroundColor: resetButtonHover ? "#ffcdd2" : "#ffebee", 
-                color: "#2d3436", 
-                borderColor: resetButtonHover ? "#e57373" : "#ef9a9a" 
+              style={{
+                backgroundColor: resetButtonHover ? "#ffcdd2" : "#ffebee",
+                color: "#2d3436",
+                borderColor: resetButtonHover ? "#e57373" : "#ef9a9a",
               }}
               onMouseEnter={() => setResetButtonHover(true)}
               onMouseLeave={() => setResetButtonHover(false)}
@@ -1708,16 +2020,18 @@ const ConsolidatedReports = () => {
 
       {showFilterPopup.show && (
         <div className="filter-popup">
-          <div className="popup-content"            
-                style={{
-                  maxWidth: "700px !important",
-                  maxHeight: "120vh !important"
-                }} >
+          <div
+            className="popup-content"
+            style={{
+              maxWidth: "700px !important",
+              maxHeight: "120vh !important",
+            }}
+          >
             <div className="popup-header">
               <h3>Select {showFilterPopup.type.replace(/_/g, " ")}</h3>
               <button
                 className="close-button"
-                               onClick={() =>
+                onClick={() =>
                   setShowFilterPopup({
                     show: false,
                     type: null,
@@ -1854,38 +2168,38 @@ const ConsolidatedReports = () => {
       )}
 
       <div className="results-section">
-      <div className="results-header">
-        <div className="results-header-left">
-          <h4>
-            {showSummary
-              ? "Summary Dashboard"
-              : `Raw Data (${filteredData.length} records)`}
-            {loading && <span className="loading-indicator">Loading...</span>}
-          </h4>
+        <div className="results-header">
+          <div className="results-header-left">
+            <h4>
+              {showSummary
+                ? "Summary Dashboard"
+                : `Raw Data (${filteredData.length} records)`}
+              {loading && <span className="loading-indicator">Loading...</span>}
+            </h4>
 
-          {tableData.length > 0 && (
-            <button
-              className={`view-toggle-button`}
-              onClick={toggleSummaryView}
-              style={{ marginLeft: "15px" }}
-              title={
-                showSummary
-                  ? "Switch to raw data view"
-                  : "Switch to summary view"
-              }
-            >
-              {showSummary ? (
-                <>
-                  <FaTable /> View Raw Data
-                </>
-              ) : (
-                <>
-                  <FaChartBar /> View Summary
-                </>
-              )}
-            </button>
-          )}
-        </div>
+            {tableData.length > 0 && (
+              <button
+                className={`view-toggle-button`}
+                onClick={toggleSummaryView}
+                style={{ marginLeft: "15px" }}
+                title={
+                  showSummary
+                    ? "Switch to raw data view"
+                    : "Switch to summary view"
+                }
+              >
+                {showSummary ? (
+                  <>
+                    <FaTable /> View Raw Data
+                  </>
+                ) : (
+                  <>
+                    <FaChartBar /> View Summary
+                  </>
+                )}
+              </button>
+            )}
+          </div>
 
           <div className="results-controls">
             {!showSummary && (
@@ -1914,7 +2228,9 @@ const ConsolidatedReports = () => {
               onClick={downloadCSV}
               disabled={!filteredData.length}
               className="download-button"
-              title={showSummary ? "Download Summary CSV" : "Download Raw Data CSV"}
+              title={
+                showSummary ? "Download Summary CSV" : "Download Raw Data CSV"
+              }
             >
               <FaDownload /> CSV
             </button>
@@ -1922,101 +2238,103 @@ const ConsolidatedReports = () => {
               onClick={downloadHTML}
               disabled={!filteredData.length}
               className="download-button"
-              title={showSummary ? "Download Summary HTML" : "Download Raw Data HTML"}
+              title={
+                showSummary ? "Download Summary HTML" : "Download Raw Data HTML"
+              }
               style={{ marginLeft: "10px" }}
             >
               <FaDownload /> HTML
             </button>
           </div>
-      </div>
+        </div>
 
-      <div className="active-filters">
-        {filters.MACHINE_ID && filters.MACHINE_ID.length > 0 && (
-          <div className="active-filter">
-            Machine ID:
-            {filters.MACHINE_ID.includes("All") ? (
-              <span className="filter-value">
-                All
-                <button onClick={() => removeFilter("MACHINE_ID", "All")}>
-                  ×
-                </button>
-              </span>
-            ) : (
-              filters.MACHINE_ID.map((value, idx) => (
-                <span key={idx} className="filter-value">
-                  {value}
-                  <button onClick={() => removeFilter("MACHINE_ID", value)}>
+        <div className="active-filters">
+          {filters.MACHINE_ID && filters.MACHINE_ID.length > 0 && (
+            <div className="active-filter">
+              Machine ID:
+              {filters.MACHINE_ID.includes("All") ? (
+                <span className="filter-value">
+                  All
+                  <button onClick={() => removeFilter("MACHINE_ID", "All")}>
                     ×
                   </button>
                 </span>
-              ))
-            )}
-          </div>
-        )}
+              ) : (
+                filters.MACHINE_ID.map((value, idx) => (
+                  <span key={idx} className="filter-value">
+                    {value}
+                    <button onClick={() => removeFilter("MACHINE_ID", value)}>
+                      ×
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
+          )}
 
-        {filters.LINE_NUMB && filters.LINE_NUMB.length > 0 && (
-          <div className="active-filter">
-            Line Number:
-            {filters.LINE_NUMB.includes("All") ? (
-              <span className="filter-value">
-                All
-                <button onClick={() => removeFilter("LINE_NUMB", "All")}>
-                  ×
-                </button>
-              </span>
-            ) : (
-              filters.LINE_NUMB.map((value, idx) => (
-                <span key={idx} className="filter-value">
-                  {value}
-                  <button onClick={() => removeFilter("LINE_NUMB", value)}>
+          {filters.LINE_NUMB && filters.LINE_NUMB.length > 0 && (
+            <div className="active-filter">
+              Line Number:
+              {filters.LINE_NUMB.includes("All") ? (
+                <span className="filter-value">
+                  All
+                  <button onClick={() => removeFilter("LINE_NUMB", "All")}>
                     ×
                   </button>
                 </span>
-              ))
-            )}
-          </div>
-        )}
+              ) : (
+                filters.LINE_NUMB.map((value, idx) => (
+                  <span key={idx} className="filter-value">
+                    {value}
+                    <button onClick={() => removeFilter("LINE_NUMB", value)}>
+                      ×
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
+          )}
 
-        {filters.operator_name && filters.operator_name.length > 0 && (
-          <div className="active-filter">
-            Operator Name:
-            {filters.operator_name.includes("All") ? (
-              <span className="filter-value">
-                All
-                <button onClick={() => removeFilter("operator_name", "All")}>
-                  ×
-                </button>
-              </span>
-            ) : (
-              filters.operator_name.map((value, idx) => (
-                <span key={idx} className="filter-value">
-                  {value}
-                  <button
-                    onClick={() => removeFilter("operator_name", value)}
-                  >
+          {filters.operator_name && filters.operator_name.length > 0 && (
+            <div className="active-filter">
+              Operator Name:
+              {filters.operator_name.includes("All") ? (
+                <span className="filter-value">
+                  All
+                  <button onClick={() => removeFilter("operator_name", "All")}>
                     ×
                   </button>
                 </span>
-              ))
-            )}
-          </div>
-        )}
+              ) : (
+                filters.operator_name.map((value, idx) => (
+                  <span key={idx} className="filter-value">
+                    {value}
+                    <button
+                      onClick={() => removeFilter("operator_name", value)}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
+          )}
 
-        {(fromDate || toDate) && (
-          <div className="active-filter">
-            Date Range: {fromDate || "Start"} to {toDate || "End"}
-            <button
-              onClick={() => {
-                setFromDate("");
-                setToDate("");
-                setCurrentPage(1);
-              }}
-            >
-              ×
-            </button>
-          </div>
-        )}
-      </div>
+          {(fromDate || toDate) && (
+            <div className="active-filter">
+              Date Range: {fromDate || "Start"} to {toDate || "End"}
+              <button
+                onClick={() => {
+                  setFromDate("");
+                  setToDate("");
+                  setCurrentPage(1);
+                }}
+              >
+                ×
+              </button>
+            </div>
+          )}
+        </div>
         {showSummary && (
           <div className="summary-section" style={{ marginBottom: "48px" }}>
             <h4>Summary Report</h4>
@@ -2163,36 +2481,84 @@ const ConsolidatedReports = () => {
                               (sum, d) => sum + (d.duration_hours || 0),
                               0
                             );
-                           
+
                           // Calculate total hours based on actual data, not fixed 10 hours
-                          const totalHours = sewing + idle + noFeeding + meeting + maintenance + rework + needleBreak;
-                          
+                          const totalHours =
+                            sewing +
+                            idle +
+                            noFeeding +
+                            meeting +
+                            maintenance +
+                            rework +
+                            needleBreak;
+
                           // Calculate PT and NPT percentages
                           const productiveTime = sewing;
-                          const nonProductiveTime = idle + noFeeding + meeting + maintenance + rework + needleBreak;
-                          
-                          const productivePercent = totalHours > 0 ? ((productiveTime / totalHours) * 100).toFixed(2) : "0.00";
-                          const nonProductivePercent = totalHours > 0 ? ((nonProductiveTime / totalHours) * 100).toFixed(2) : "0.00";
-                          
+                          const nonProductiveTime =
+                            idle +
+                            noFeeding +
+                            meeting +
+                            maintenance +
+                            rework +
+                            needleBreak;
+
+                          const productivePercent =
+                            totalHours > 0
+                              ? ((productiveTime / totalHours) * 100).toFixed(2)
+                              : "0.00";
+                          const nonProductivePercent =
+                            totalHours > 0
+                              ? (
+                                  (nonProductiveTime / totalHours) *
+                                  100
+                                ).toFixed(2)
+                              : "0.00";
+
                           // Calculate needle runtime percentage
                           const sewingSeconds = sewing * 3600; // Convert sewing hours to seconds
-                          const totalNeedleRuntime = machineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
-                          const needleRuntimePercent = sewingSeconds > 0 ?
-                            ((totalNeedleRuntime / sewingSeconds) * 100).toFixed(2) : "0.00";
-                          
+                          const totalNeedleRuntime = machineRows
+                            .filter((d) => d.MODE === 1)
+                            .reduce(
+                              (sum, d) => sum + (d.NEEDLE_RUNTIME || 0),
+                              0
+                            );
+                          const needleRuntimePercent =
+                            sewingSeconds > 0
+                              ? (
+                                  (totalNeedleRuntime / sewingSeconds) *
+                                  100
+                                ).toFixed(2)
+                              : "0.00";
+
                           // Calculate sewing speed
-                          const sewingModeRecords = machineRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
-                          const totalSPM = sewingModeRecords.reduce((sum, d) => {
-                            const reserve = Number(d.RESERVE) || 0;
-                            return sum + reserve;
-                          }, 0);
+                          const sewingModeRecords = machineRows.filter(
+                            (d) =>
+                              d.MODE === 1 &&
+                              d.RESERVE !== undefined &&
+                              d.RESERVE !== null
+                          );
+                          const totalSPM = sewingModeRecords.reduce(
+                            (sum, d) => {
+                              const reserve = Number(d.RESERVE) || 0;
+                              return sum + reserve;
+                            },
+                            0
+                          );
                           const numberOfInstances = sewingModeRecords.length;
-                          const sewingSpeed = numberOfInstances > 0 ? (totalSPM / numberOfInstances).toFixed(2) : "0.00";
-                          
+                          const sewingSpeed =
+                            numberOfInstances > 0
+                              ? (totalSPM / numberOfInstances).toFixed(2)
+                              : "0.00";
+
                           // Calculate stitch count and machine count
-                          const totalStitches = machineRows.reduce((sum, d) => sum + (d.STITCH_COUNT || 0), 0);
-                          const machineCount = new Set(machineRows.map(d => d.MACHINE_ID)).size;
-                          
+                          const totalStitches = machineRows.reduce(
+                            (sum, d) => sum + (d.STITCH_COUNT || 0),
+                            0
+                          );
+                          const machineCount = new Set(
+                            machineRows.map((d) => d.MACHINE_ID)
+                          ).size;
+
                           return (
                             <tr key={machineId}>
                               <td>{machineId}</td>
@@ -2217,113 +2583,189 @@ const ConsolidatedReports = () => {
                   </div>
                 </>
               )}
-                                                                      {summaryFilter === "operator" && (
-                                                                        <>
-                                                                          <h5 style={{ marginBottom: "20px" }}>Operator ID Summary</h5>
-                                                                          <div style={{ overflowX: "auto", marginBottom: "24px" }}>
-                                                                            <table className="summary-table">
-                                                                              <thead>
-                                                                                <tr>
-                                                                                  <th>Operator ID</th>
-                                                                                  <th>Operator Name</th>
-                                                                                  <th>Total Hours</th>
-                                                                                  <th>Sewing</th>
-                                                                                  <th>Idle</th>
-                                                                                  <th>Rework</th>
-                                                                                  <th>No Feeding</th>
-                                                                                  <th>Meeting</th>
-                                                                                  <th>Maintenance</th>
-                                                                                  <th>Needle Break</th>
-                                                                                  <th>PT(%)</th>
-                                                                                  <th>NPT (%)</th>
-                                                                                  <th>Needle Runtime (%)</th>
-                                                                                  <th>Sewing Speed</th>
-                                                                                  <th>Stitch Count</th>
-                                                                                </tr>
-                                                                              </thead>
-                                                                              <tbody>
-                                                                                {[
-                                                                                  ...new Set(
-                                                                                    filteredData
-                                                                                      .filter((d) => !d.isSummary)
-                                                                                      .map((d) => d.OPERATOR_ID)
-                                                                                  ),
-                                                                                ].map((operatorId) => {
-                                                                                  const operatorRows = filteredData.filter(
-                                                                                    (d) => d.OPERATOR_ID === operatorId && !d.isSummary
-                                                                                  );
-                                                                                  const operatorName = operatorRows[0]?.operator_name || "-";
-                                                                                  
-                                                                                  // Calculate individual activity hours for each MODE
-                                                                                  const sewing = operatorRows.filter((d) => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                                                                                  const meeting = operatorRows.filter((d) => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                                                                                  const noFeeding = operatorRows.filter((d) => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                                                                                  const maintenance = operatorRows.filter((d) => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                                                                                  const rework = operatorRows.filter((d) => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                                                                                  const needleBreak = operatorRows.filter((d) => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                                                                                  
-                                                                                  // Calculate work hours and idle hours using the same logic as Operator Report
-                                                                                  const workHours = sewing + maintenance + needleBreak + noFeeding + meeting + rework;
-                                                                                  
-                                                                                  // Apply the 10-hour rule consistently
-                                                                                  let idle;
-                                                                                  if (workHours >= 10) {
-                                                                                    idle = 0;
-                                                                                  } else {
-                                                                                    idle = 10 - workHours;
-                                                                                  }
-                                                                                  
-                                                                                  const totalHours = workHours + idle; // Should always be 10 for daily data
-                                                                                  const productivePercent = totalHours > 0 ? ((sewing / totalHours) * 100).toFixed(2) : "0.00";
-                                                                                  const nonProductivePercent = totalHours > 0 ? (((idle + meeting + noFeeding + maintenance + rework + needleBreak) / totalHours) * 100).toFixed(2) : "0.00";
-                                                                                  
-                                                                                  // FIXED: Calculate Needle Runtime % using the same logic as Operator Report
-                                                                                                                                                                    // In operator summary section (around line 839)
-                                                                                  const sewingSeconds = sewing * 3600; // Convert sewing hours to seconds
-                                                                                  const totalNeedleRuntime = operatorRows.filter((d) => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
-                                                                                  const needleRuntimePercent = sewingSeconds > 0 ? 
-                                                                                    ((totalNeedleRuntime / sewingSeconds) * 100).toFixed(2) : "0.00";
-                                                                                  // Calculate Sewing Speed (SPM = Total SPM / Number of instances) 
-                                                                                  const sewingModeRecords = operatorRows.filter((d) => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
-                                                                                  const totalSPM = sewingModeRecords.reduce((sum, d) => {
-                                                                                    const reserve = Number(d.RESERVE) || 0;
-                                                                                    return sum + reserve;
-                                                                                  }, 0);
-                                                                                  const numberOfInstances = sewingModeRecords.length;
-                                                                                  const sewingSpeed = numberOfInstances > 0 ? (totalSPM / numberOfInstances).toFixed(2) : "0.00";
-                                                                                  
-                                                                                  // Get total stitch count for all modes
-                                                                                  const totalStitches = operatorRows.reduce((sum, d) => sum + (d.STITCH_COUNT || 0), 0);
-                                                                                  
-                                                                                  return (
-                                                                                    <tr key={operatorId}>
-                                                                                      <td>{operatorId}</td>
-                                                                                      <td>{operatorName}</td>
-                                                                                      <td>{formatHoursMinutes(totalHours)}</td>
-                                                                                      <td>{formatHoursMinutes(sewing)}</td>
-                                                                                      <td>{formatHoursMinutes(idle)}</td>
-                                                                                      <td>{formatHoursMinutes(rework)}</td>
-                                                                                      <td>{formatHoursMinutes(noFeeding)}</td>
-                                                                                      <td>{formatHoursMinutes(meeting)}</td>
-                                                                                      <td>{formatHoursMinutes(maintenance)}</td>
-                                                                                      <td>{formatHoursMinutes(needleBreak)}</td>
-                                                                                      <td>{productivePercent}%</td>
-                                                                                      <td>{nonProductivePercent}%</td>
-                                                                                      <td>{needleRuntimePercent}%</td>
-                                                                                      <td>{sewingSpeed}</td>
-                                                                                      <td>{totalStitches}</td>
-                                                                                    </tr>
-                                                                                  );
-                                                                                })}
-                                                                              </tbody>
-                                                                            </table>
-                                                                          </div>
-                                                                        </>
-                                                                      )}
-                  {summaryFilter === "line" && (
+              {summaryFilter === "operator" && (
                 <>
-                  <h5 style={{ marginBottom: '20px' }}>Line Number Summary</h5>
-                  <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
+                  <h5 style={{ marginBottom: "20px" }}>Operator ID Summary</h5>
+                  <div style={{ overflowX: "auto", marginBottom: "24px" }}>
+                    <table className="summary-table">
+                      <thead>
+                        <tr>
+                          <th>Operator ID</th>
+                          <th>Operator Name</th>
+                          <th>Total Hours</th>
+                          <th>Sewing</th>
+                          <th>Idle</th>
+                          <th>Rework</th>
+                          <th>No Feeding</th>
+                          <th>Meeting</th>
+                          <th>Maintenance</th>
+                          <th>Needle Break</th>
+                          <th>PT(%)</th>
+                          <th>NPT (%)</th>
+                          <th>Needle Runtime (%)</th>
+                          <th>Sewing Speed</th>
+                          <th>Stitch Count</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          ...new Set(
+                            filteredData
+                              .filter((d) => !d.isSummary)
+                              .map((d) => d.OPERATOR_ID)
+                          ),
+                        ].map((operatorId) => {
+                          const operatorRows = filteredData.filter(
+                            (d) => d.OPERATOR_ID === operatorId && !d.isSummary
+                          );
+                          const operatorName =
+                            operatorRows[0]?.operator_name || "-";
+
+                          // Calculate individual activity hours for each MODE
+                          const sewing = operatorRows
+                            .filter((d) => d.MODE === 1)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+                          const meeting = operatorRows
+                            .filter((d) => d.MODE === 3)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+                          const noFeeding = operatorRows
+                            .filter((d) => d.MODE === 4)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+                          const maintenance = operatorRows
+                            .filter((d) => d.MODE === 5)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+                          const rework = operatorRows
+                            .filter((d) => d.MODE === 6)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+                          const needleBreak = operatorRows
+                            .filter((d) => d.MODE === 7)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+
+                          // Calculate work hours and idle hours using the same logic as Operator Report
+                          const workHours =
+                            sewing +
+                            maintenance +
+                            needleBreak +
+                            noFeeding +
+                            meeting +
+                            rework;
+
+                          // Apply the 10-hour rule consistently
+                          let idle;
+                          if (workHours >= 10) {
+                            idle = 0;
+                          } else {
+                            idle = 10 - workHours;
+                          }
+
+                          const totalHours = workHours + idle; // Should always be 10 for daily data
+                          const productivePercent =
+                            totalHours > 0
+                              ? ((sewing / totalHours) * 100).toFixed(2)
+                              : "0.00";
+                          const nonProductivePercent =
+                            totalHours > 0
+                              ? (
+                                  ((idle +
+                                    meeting +
+                                    noFeeding +
+                                    maintenance +
+                                    rework +
+                                    needleBreak) /
+                                    totalHours) *
+                                  100
+                                ).toFixed(2)
+                              : "0.00";
+
+                          // FIXED: Calculate Needle Runtime % using the same logic as Operator Report
+                          // In operator summary section (around line 839)
+                          const sewingSeconds = sewing * 3600; // Convert sewing hours to seconds
+                          const totalNeedleRuntime = operatorRows
+                            .filter((d) => d.MODE === 1)
+                            .reduce(
+                              (sum, d) => sum + (d.NEEDLE_RUNTIME || 0),
+                              0
+                            );
+                          const needleRuntimePercent =
+                            sewingSeconds > 0
+                              ? (
+                                  (totalNeedleRuntime / sewingSeconds) *
+                                  100
+                                ).toFixed(2)
+                              : "0.00";
+                          // Calculate Sewing Speed (SPM = Total SPM / Number of instances)
+                          const sewingModeRecords = operatorRows.filter(
+                            (d) =>
+                              d.MODE === 1 &&
+                              d.RESERVE !== undefined &&
+                              d.RESERVE !== null
+                          );
+                          const totalSPM = sewingModeRecords.reduce(
+                            (sum, d) => {
+                              const reserve = Number(d.RESERVE) || 0;
+                              return sum + reserve;
+                            },
+                            0
+                          );
+                          const numberOfInstances = sewingModeRecords.length;
+                          const sewingSpeed =
+                            numberOfInstances > 0
+                              ? (totalSPM / numberOfInstances).toFixed(2)
+                              : "0.00";
+
+                          // Get total stitch count for all modes
+                          const totalStitches = operatorRows.reduce(
+                            (sum, d) => sum + (d.STITCH_COUNT || 0),
+                            0
+                          );
+
+                          return (
+                            <tr key={operatorId}>
+                              <td>{operatorId}</td>
+                              <td>{operatorName}</td>
+                              <td>{formatHoursMinutes(totalHours)}</td>
+                              <td>{formatHoursMinutes(sewing)}</td>
+                              <td>{formatHoursMinutes(idle)}</td>
+                              <td>{formatHoursMinutes(rework)}</td>
+                              <td>{formatHoursMinutes(noFeeding)}</td>
+                              <td>{formatHoursMinutes(meeting)}</td>
+                              <td>{formatHoursMinutes(maintenance)}</td>
+                              <td>{formatHoursMinutes(needleBreak)}</td>
+                              <td>{productivePercent}%</td>
+                              <td>{nonProductivePercent}%</td>
+                              <td>{needleRuntimePercent}%</td>
+                              <td>{sewingSpeed}</td>
+                              <td>{totalStitches}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+              {summaryFilter === "line" && (
+                <>
+                  <h5 style={{ marginBottom: "20px" }}>Line Number Summary</h5>
+                  <div style={{ overflowX: "auto", marginBottom: "24px" }}>
                     <table className="summary-table">
                       <thead>
                         <tr>
@@ -2345,47 +2787,138 @@ const ConsolidatedReports = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {[...new Set(filteredData.filter(d => !d.isSummary).map(d => d.LINE_NUMB))].map(lineNum => {
-                          const lineRows = filteredData.filter(d => d.LINE_NUMB === lineNum && !d.isSummary);
-                          
+                        {[
+                          ...new Set(
+                            filteredData
+                              .filter((d) => !d.isSummary)
+                              .map((d) => d.LINE_NUMB)
+                          ),
+                        ].map((lineNum) => {
+                          const lineRows = filteredData.filter(
+                            (d) => d.LINE_NUMB === lineNum && !d.isSummary
+                          );
+
                           // Calculate hours for each mode using correct mode mapping
-                          const sewing = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                          const idle = lineRows.filter(d => d.MODE === 2).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                          const noFeeding = lineRows.filter(d => d.MODE === 3).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                          const meeting = lineRows.filter(d => d.MODE === 4).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                          const maintenance = lineRows.filter(d => d.MODE === 5).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                          const rework = lineRows.filter(d => d.MODE === 6).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                          const needleBreak = lineRows.filter(d => d.MODE === 7).reduce((sum, d) => sum + (d.duration_hours || 0), 0);
-                          
+                          const sewing = lineRows
+                            .filter((d) => d.MODE === 1)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+                          const idle = lineRows
+                            .filter((d) => d.MODE === 2)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+                          const noFeeding = lineRows
+                            .filter((d) => d.MODE === 3)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+                          const meeting = lineRows
+                            .filter((d) => d.MODE === 4)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+                          const maintenance = lineRows
+                            .filter((d) => d.MODE === 5)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+                          const rework = lineRows
+                            .filter((d) => d.MODE === 6)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+                          const needleBreak = lineRows
+                            .filter((d) => d.MODE === 7)
+                            .reduce(
+                              (sum, d) => sum + (d.duration_hours || 0),
+                              0
+                            );
+
                           // Calculate total hours based on actual data, not fixed 10 hours
-                          const totalHours = sewing + idle + noFeeding + meeting + maintenance + rework + needleBreak;
-                          
+                          const totalHours =
+                            sewing +
+                            idle +
+                            noFeeding +
+                            meeting +
+                            maintenance +
+                            rework +
+                            needleBreak;
+
                           // Calculate PT and NPT percentages
                           const productiveTime = sewing;
-                          const nonProductiveTime = idle + noFeeding + meeting + maintenance + rework + needleBreak;
-                          
-                          const productivePercent = totalHours > 0 ? ((productiveTime / totalHours) * 100).toFixed(2) : "0.00";
-                          const nonProductivePercent = totalHours > 0 ? ((nonProductiveTime / totalHours) * 100).toFixed(2) : "0.00";
-                          
+                          const nonProductiveTime =
+                            idle +
+                            noFeeding +
+                            meeting +
+                            maintenance +
+                            rework +
+                            needleBreak;
+
+                          const productivePercent =
+                            totalHours > 0
+                              ? ((productiveTime / totalHours) * 100).toFixed(2)
+                              : "0.00";
+                          const nonProductivePercent =
+                            totalHours > 0
+                              ? (
+                                  (nonProductiveTime / totalHours) *
+                                  100
+                                ).toFixed(2)
+                              : "0.00";
+
                           // Calculate needle runtime percentage
                           const sewingSeconds = sewing * 3600; // Convert sewing hours to seconds
-                          const totalNeedleRuntime = lineRows.filter(d => d.MODE === 1).reduce((sum, d) => sum + (d.NEEDLE_RUNTIME || 0), 0);
-                          const needleRuntimePercent = sewingSeconds > 0 ?
-                            ((totalNeedleRuntime / sewingSeconds) * 100).toFixed(2) : "0.00";
-                          
+                          const totalNeedleRuntime = lineRows
+                            .filter((d) => d.MODE === 1)
+                            .reduce(
+                              (sum, d) => sum + (d.NEEDLE_RUNTIME || 0),
+                              0
+                            );
+                          const needleRuntimePercent =
+                            sewingSeconds > 0
+                              ? (
+                                  (totalNeedleRuntime / sewingSeconds) *
+                                  100
+                                ).toFixed(2)
+                              : "0.00";
+
                           // Calculate sewing speed
-                          const sewingModeRecords = lineRows.filter(d => d.MODE === 1 && d.RESERVE !== undefined && d.RESERVE !== null);
-                          const totalSPM = sewingModeRecords.reduce((sum, d) => {
-                            const reserve = Number(d.RESERVE) || 0;
-                            return sum + reserve;
-                          }, 0);
+                          const sewingModeRecords = lineRows.filter(
+                            (d) =>
+                              d.MODE === 1 &&
+                              d.RESERVE !== undefined &&
+                              d.RESERVE !== null
+                          );
+                          const totalSPM = sewingModeRecords.reduce(
+                            (sum, d) => {
+                              const reserve = Number(d.RESERVE) || 0;
+                              return sum + reserve;
+                            },
+                            0
+                          );
                           const numberOfInstances = sewingModeRecords.length;
-                          const sewingSpeed = numberOfInstances > 0 ? (totalSPM / numberOfInstances).toFixed(2) : "0.00";
-                          
+                          const sewingSpeed =
+                            numberOfInstances > 0
+                              ? (totalSPM / numberOfInstances).toFixed(2)
+                              : "0.00";
+
                           // Calculate stitch count and machine count
-                          const totalStitches = lineRows.reduce((sum, d) => sum + (d.STITCH_COUNT || 0), 0);
-                          const machineCount = new Set(lineRows.map(d => d.MACHINE_ID)).size;
-                          
+                          const totalStitches = lineRows.reduce(
+                            (sum, d) => sum + (d.STITCH_COUNT || 0),
+                            0
+                          );
+                          const machineCount = new Set(
+                            lineRows.map((d) => d.MACHINE_ID)
+                          ).size;
+
                           return (
                             <tr key={lineNum}>
                               <td>{lineNum}</td>
@@ -2412,34 +2945,32 @@ const ConsolidatedReports = () => {
                 </>
               )}
             </div>
-  
-     
-                  <div className="summary-tiles">
-                    <div className="tile production-percentage">
-                      <p>
-                        {summaryFilter === "machine" || summaryFilter === "line"
-                          ? calculateAggregatedMetrics().productiveTime.toFixed(2)
-                          : calculateAggregatedMetrics().productiveTime.toFixed(2) + "%"}
-                      </p>
-                      <span>
-                        {summaryFilter === "machine" || summaryFilter === "line" 
-                          ? "Total Productive Time %" 
-                          : "Productive Time"}
-                      </span>
-                    </div>
-                    <div className="tile needle-runtime-percentage">
-                      <p>{calculateAggregatedMetrics().needleRuntimePercentage.toFixed(2)}%</p>
-                      <span>Needle Time</span>
-                    </div>              
-                    <div className="tile sewing-speed">
-                      <p>{calculateAggregatedMetrics().sewingSpeed.toFixed(2)}</p>
-                      <span>Sewing Speed</span>
-                    </div>
-                    <div className="tile total-hours">
-                      <p>{formatHoursMinutes(calculateAggregatedMetrics().totalHours)}</p>
-                      <span>Total Hours</span>
-                    </div>
-                  </div>
+
+            <div className="summary-tiles">
+              <div className="tile production-percentage">
+                <p>{calculateAggregatedMetrics().productiveTime.toFixed(2)}%</p>
+                <span>Productive Time %</span>
+              </div>
+              <div className="tile needle-runtime-percentage">
+                <p>
+                  {calculateAggregatedMetrics().needleRuntimePercentage.toFixed(
+                    2
+                  )}
+                  %
+                </p>
+                <span>Needle Time</span>
+              </div>
+              <div className="tile sewing-speed">
+                <p>{calculateAggregatedMetrics().sewingSpeed.toFixed(2)}</p>
+                <span>Sewing Speed</span>
+              </div>
+              <div className="tile total-hours">
+                <p>
+                  {formatHoursMinutes(calculateAggregatedMetrics().totalHours)}
+                </p>
+                <span>Total Hours</span>
+              </div>
+            </div>
             <div className="summary-content" style={{ marginTop: "32px" }}>
               <div className="summary-chart">
                 <Doughnut
@@ -2552,14 +3083,10 @@ const ConsolidatedReports = () => {
                     Break Hours
                   </p>
                 </div>
-               
               </div>
-
             </div>
           </div>
         )}
-
-
 
         {!showSummary && (
           <div className="table-container">
@@ -2629,7 +3156,7 @@ const ConsolidatedReports = () => {
           flex-wrap: wrap;
           justify-content: center;
         }
-      .summary-tiles {
+        .summary-tiles {
           display: flex;
           justify-content: flex-start;
           margin: 20px 0;
@@ -2728,7 +3255,7 @@ const ConsolidatedReports = () => {
             flex-direction: column;
             align-items: center;
           }
-          
+
           .tile {
             width: 100%;
             max-width: 300px;
@@ -2740,11 +3267,11 @@ const ConsolidatedReports = () => {
             width: 100%;
             padding: 12px;
           }
-          
+
           .tile p {
             font-size: 1.8rem;
           }
-          
+
           .tile span {
             font-size: 0.9rem;
           }

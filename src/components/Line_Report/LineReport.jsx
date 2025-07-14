@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 import { FaTshirt, FaClock, FaTools, FaDownload } from "react-icons/fa";
 import "./LineStyles.css";
 
@@ -12,7 +19,7 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
     totalHours: 0,
     totalProductiveTime: {
       hours: 0,
-      percentage: 0
+      percentage: 0,
     },
     totalNonProductiveTime: {
       hours: 0,
@@ -23,30 +30,30 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
         maintenanceHours: 0,
         reworkHours: 0,
         needleBreakHours: 0,
-        idleHours: 0
-      }
+        idleHours: 0,
+      },
     },
     totalStitchCount: 0,
     averageSewingSpeed: 0,
     totalNeedleRuntime: 0,
     needleRuntimePercentage: 0,
     tableData: [],
-    allTableData: []
+    allTableData: [],
   });
 
   const [tableFilter, setTableFilter] = useState({
-    fromDate: '',
-    toDate: ''
+    fromDate: "",
+    toDate: "",
   });
 
   useEffect(() => {
     if (!lineNumber) return;
 
     const params = new URLSearchParams();
-    if (fromDate) params.append('from_date', fromDate);
-    if (toDate) params.append('to_date', toDate);
+    if (fromDate) params.append("from_date", fromDate);
+    if (toDate) params.append("to_date", toDate);
 
-    fetch(`http://localhost:8000/api/line-reports/${lineNumber}/?${params}`)
+    fetch(`https://oceanatlantic.pinesphere.co.in/api/line-reports/${lineNumber}/?${params}`)
       .then((response) => response.json())
       .then((data) => {
         setReportData({
@@ -60,36 +67,38 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
 
   const handleTableFilterChange = (e) => {
     const { name, value } = e.target;
-    setTableFilter(prev => ({ ...prev, [name]: value }));
+    setTableFilter((prev) => ({ ...prev, [name]: value }));
   };
 
   const applyTableFilter = () => {
-    const filteredData = reportData.allTableData.filter(row => {
+    const filteredData = reportData.allTableData.filter((row) => {
       const rowDate = new Date(row.Date);
-      const fromDate = tableFilter.fromDate ? new Date(tableFilter.fromDate) : null;
+      const fromDate = tableFilter.fromDate
+        ? new Date(tableFilter.fromDate)
+        : null;
       const toDate = tableFilter.toDate ? new Date(tableFilter.toDate) : null;
-      
+
       let valid = true;
       if (fromDate) valid = valid && rowDate >= fromDate;
       if (toDate) valid = valid && rowDate <= toDate;
       return valid;
     });
 
-    setReportData(prev => ({
+    setReportData((prev) => ({
       ...prev,
-      tableData: filteredData
+      tableData: filteredData,
     }));
   };
 
   const resetTableFilter = () => {
-    setTableFilter({ fromDate: '', toDate: '' });
-    setReportData(prev => ({
+    setTableFilter({ fromDate: "", toDate: "" });
+    setReportData((prev) => ({
       ...prev,
-      tableData: prev.allTableData
+      tableData: prev.allTableData,
     }));
   };
 
- /*  const downloadCSV = () => {
+  /*  const downloadCSV = () => {
     if (!reportData.tableData || reportData.tableData.length === 0) {
       console.error("No data available to download");
       return;
@@ -117,10 +126,8 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
     document.body.removeChild(link);
   }; */
 
-  
- 
   // ...existing code...
-  
+
   /**
    * Download CSV function (summary-heads-driven, similar to AllLinesReport)
    */
@@ -140,19 +147,19 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
     { label: "Needle Runtime %", key: "Needle Runtime Percentage" },
     { label: "Sewing Speed", key: "Sewing Speed" },
     { label: "Stitch Count", key: "Stitch Count" },
-    { label: "Machine Count", key: "Machine Count" }
+    { label: "Machine Count", key: "Machine Count" },
   ];
-  
+
   const downloadCSV = () => {
     if (!reportData.tableData || reportData.tableData.length === 0) {
       console.error("No data available to download");
       return;
     }
-  
-    const headers = SUMMARY_TABLE_HEADS.map(head => head.label);
-  
-    const rows = reportData.tableData.map(row =>
-      SUMMARY_TABLE_HEADS.map(head =>
+
+    const headers = SUMMARY_TABLE_HEADS.map((head) => head.label);
+
+    const rows = reportData.tableData.map((row) =>
+      SUMMARY_TABLE_HEADS.map((head) =>
         head.key === "Line Number"
           ? row["Line Number"] || lineNumber
           : [
@@ -163,41 +170,44 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
               "No Feeding Hours",
               "Meeting Hours",
               "Maintenance Hours",
-              "Needle Break Hours"
+              "Needle Break Hours",
             ].includes(head.key)
-            ? formatHoursMinutes(row[head.key])
-            : head.key === "Needle Runtime Percentage"
-              ? getNeedleRuntimePercentage(row)
-              : row[head.key]?.toFixed
-                ? row[head.key].toFixed(2)
-                : row[head.key] !== undefined
-                  ? row[head.key]
-                  : ""
+          ? formatHoursMinutes(row[head.key])
+          /* : head.key === "Needle Runtime Percentage"
+          ? getNeedleRuntimePercentage(row) */
+          : head.key === "Needle Runtime Percentage"
+            ? safeToFixed(reportData.needleRuntimePercentage)
+          : row[head.key]?.toFixed
+          ? row[head.key].toFixed(2)
+          : row[head.key] !== undefined
+          ? row[head.key]
+          : ""
       )
     );
-  
+
     const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-  
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+      headers.join(","),
+      ...rows.map((row) => row.join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `line_${lineNumber}_report_${new Date().toISOString().slice(0,10)}.csv`);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `line_${lineNumber}_report_${new Date().toISOString().slice(0, 10)}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
-  
+
   // ...existing code...
 
-  
-  
   const safeToFixed = (value, decimals = 2) => {
-    if (value === undefined || value === null) return '0.00';
-    if (typeof value !== 'number') return value;
+    if (value === undefined || value === null) return "0.00";
+    if (typeof value !== "number") return value;
     return value.toFixed(decimals);
   };
 
@@ -224,26 +234,38 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
       <body> 
         <div class="report-header">
           <h1>Line ${lineNumber} Report</h1>
-          <p>Date Range: ${fromDate || 'N/A'} to ${toDate || 'N/A'}</p>
+          <p>Date Range: ${fromDate || "N/A"} to ${toDate || "N/A"}</p>
           <p>Generated on: ${new Date().toLocaleString()}</p>
         </div>
 
         <div class="summary-section">
           <h2>Summary</h2>
           <div class="summary-item">
-            <strong>Total Available Hours:</strong> ${safeToFixed(reportData.totalAvailableHours)}
+            <strong>Total Available Hours:</strong> ${safeToFixed(
+              reportData.totalAvailableHours
+            )}
           </div>
           <div class="summary-item">
-            <strong>Productive Time:</strong> ${safeToFixed(reportData.totalProductiveTime.hours)} Hrs (${safeToFixed(reportData.totalProductiveTime.percentage)}%)
+            <strong>Productive Time:</strong> ${safeToFixed(
+              reportData.totalProductiveTime.hours
+            )} Hrs (${safeToFixed(reportData.totalProductiveTime.percentage)}%)
           </div>
           <div class="summary-item">
-            <strong>Non-Productive Time:</strong> ${safeToFixed(reportData.totalNonProductiveTime.hours)} Hrs (${safeToFixed(reportData.totalNonProductiveTime.percentage)}%)
+            <strong>Non-Productive Time:</strong> ${safeToFixed(
+              reportData.totalNonProductiveTime.hours
+            )} Hrs (${safeToFixed(
+      reportData.totalNonProductiveTime.percentage
+    )}%)
           </div>
           <div class="summary-item">
-            <strong>Average Sewing Speed:</strong> ${safeToFixed(reportData.averageSewingSpeed)}
+            <strong>Average Sewing Speed:</strong> ${safeToFixed(
+              reportData.averageSewingSpeed
+            )}
           </div>
           <div class="summary-item">
-            <strong>Needle Runtime:</strong> ${safeToFixed(reportData.needleRuntimePercentage)}%
+            <strong>Needle Runtime:</strong> ${safeToFixed(
+              reportData.needleRuntimePercentage
+            )}%
           </div>
         </div>
 
@@ -251,28 +273,43 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
         <table>
           <thead>
             <tr>
-              ${Object.keys(reportData.tableData[0] || {}).map(header => `<th>${header}</th>`).join('')}
+              ${Object.keys(reportData.tableData[0] || {})
+                .map((header) => `<th>${header}</th>`)
+                .join("")}
             </tr>
           </thead>
           <tbody>
-            ${reportData.tableData.map(row => 
-              `<tr>
-                ${Object.values(row).map(value => 
-                  `<td>${typeof value === 'number' ? safeToFixed(value) : value || ''}</td>`
-                ).join('')}
+            ${reportData.tableData
+              .map(
+                (row) =>
+                  `<tr>
+                ${Object.values(row)
+                  .map(
+                    (value) =>
+                      `<td>${
+                        typeof value === "number"
+                          ? safeToFixed(value)
+                          : value || ""
+                      }</td>`
+                  )
+                  .join("")}
               </tr>`
-            ).join('')}
+              )
+              .join("")}
           </tbody>
         </table>
       </body>
       </html>`;
-    
-    const blob = new Blob([htmlContent], { type: 'text/html' });
+
+    const blob = new Blob([htmlContent], { type: "text/html" });
     const url = URL.createObjectURL(blob);
-    
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `line_${lineNumber}_report_${new Date().toISOString().slice(0,10)}.html`);
+
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `line_${lineNumber}_report_${new Date().toISOString().slice(0, 10)}.html`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -281,7 +318,8 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
   // Utility to convert decimal hours or "HH:MM" string to "H hours M minutes" format
   const formatHoursMinutes = (input) => {
     if (input === null || input === undefined || input === "") return "-";
-    let hours = 0, minutes = 0;
+    let hours = 0,
+      minutes = 0;
     if (typeof input === "string" && input.includes(":")) {
       const [h, m] = input.split(":").map(Number);
       if (!isNaN(h) && !isNaN(m)) {
@@ -322,24 +360,52 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
     "Meeting Hours": "#e74c3c", // red
     "Idle Hours": "#7f8c8d", // gray
     "Rework Hours": "#f39c12", // orange
-    "Needle Break Hours": "#8e44ad" // purple
+    "Needle Break Hours": "#8e44ad", // purple
   };
 
   // Prepare data for Recharts (use first row for breakdown, as in OperatorReport)
   const firstRow = reportData.tableData[0] || {};
   const chartData = [
-    { name: "Sewing Hours", value: toTotalMinutes(firstRow["Sewing Hours (PT)"]), color: colorMap["Sewing Hours"] },
-    { name: "No Feeding Hours", value: toTotalMinutes(firstRow["No Feeding Hours"]), color: colorMap["No Feeding Hours"] },
-    { name: "Maintenance Hours", value: toTotalMinutes(firstRow["Maintenance Hours"]), color: colorMap["Maintenance Hours"] },
-    { name: "Meeting Hours", value: toTotalMinutes(firstRow["Meeting Hours"]), color: colorMap["Meeting Hours"] },
-    { name: "Idle Hours", value: toTotalMinutes(firstRow["Idle Hours"]), color: colorMap["Idle Hours"] },
-    { name: "Rework Hours", value: toTotalMinutes(firstRow["Rework Hours"]), color: colorMap["Rework Hours"] },
-    { name: "Needle Break Hours", value: toTotalMinutes(firstRow["Needle Break Hours"]), color: colorMap["Needle Break Hours"] }
-  ].filter(item => item.value > 0);
-  console.log('Pie chartData:', chartData);
+    {
+      name: "Sewing Hours",
+      value: toTotalMinutes(firstRow["Sewing Hours (PT)"]),
+      color: colorMap["Sewing Hours"],
+    },
+    {
+      name: "No Feeding Hours",
+      value: toTotalMinutes(firstRow["No Feeding Hours"]),
+      color: colorMap["No Feeding Hours"],
+    },
+    {
+      name: "Maintenance Hours",
+      value: toTotalMinutes(firstRow["Maintenance Hours"]),
+      color: colorMap["Maintenance Hours"],
+    },
+    {
+      name: "Meeting Hours",
+      value: toTotalMinutes(firstRow["Meeting Hours"]),
+      color: colorMap["Meeting Hours"],
+    },
+    {
+      name: "Idle Hours",
+      value: toTotalMinutes(firstRow["Idle Hours"]),
+      color: colorMap["Idle Hours"],
+    },
+    {
+      name: "Rework Hours",
+      value: toTotalMinutes(firstRow["Rework Hours"]),
+      color: colorMap["Rework Hours"],
+    },
+    {
+      name: "Needle Break Hours",
+      value: toTotalMinutes(firstRow["Needle Break Hours"]),
+      color: colorMap["Needle Break Hours"],
+    },
+  ].filter((item) => item.value > 0);
+  console.log("Pie chartData:", chartData);
 
   // Utility to calculate needle runtime percentage for a row (like OperatorReport/MachineReport)
-  const getNeedleRuntimePercentage = (row) => {
+  /* const getNeedleRuntimePercentage = (row) => {
     let sewingHours = row["Sewing Hours (PT)"] || 0;
     let needleRuntime = row["Needle Runtime"] || 0;
     let sewingSeconds = 0;
@@ -352,7 +418,32 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
       else sewingSeconds = num * 3600; // decimal hours
     }
     // Use needleRuntime as-is (assumed seconds)
-    if (!needleRuntime || !sewingSeconds) return '0.00';
+    if (!needleRuntime || !sewingSeconds) return "0.00";
+    return ((needleRuntime / sewingSeconds) * 100).toFixed(2);
+  }; */
+
+  const getNeedleRuntimePercentage = (row) => {
+    let sewingHours = row["Sewing Hours (PT)"] || 0;
+    let needleRuntime = row["Needle Runtime"] || 0; // seconds
+    let sewingSeconds = 0;
+  
+    // Handle HH:MM string
+    if (typeof sewingHours === "string" && sewingHours.includes(":")) {
+      const [h, m] = sewingHours.split(":").map(Number);
+      sewingSeconds = (isNaN(h) ? 0 : h) * 3600 + (isNaN(m) ? 0 : m) * 60;
+    } else if (typeof sewingHours === "string" && sewingHours.includes("m")) {
+      // Handle "20m" or "1h 20m"
+      const match = sewingHours.match(/(?:(\d+)h)?\s*(\d+)m/);
+      if (match) {
+        const h = Number(match[1] || 0);
+        const m = Number(match[2] || 0);
+        sewingSeconds = h * 3600 + m * 60;
+      }
+    } else if (!isNaN(Number(sewingHours))) {
+      sewingSeconds = Number(sewingHours) * 3600;
+    }
+  
+    if (!needleRuntime || !sewingSeconds) return "0.00";
     return ((needleRuntime / sewingSeconds) * 100).toFixed(2);
   };
 
@@ -384,11 +475,12 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
                 <th>Rework</th>
                 <th>No Feeding </th>
                 <th>Meeting</th>
-                <th>Maintenance</th>                
+                <th>Maintenance</th>
                 <th>Needle Break</th>
                 <th>PT %</th>
                 <th>NPT %</th>
-                <th>Needle Runtime %</th> {/* Moved Needle Runtime % after NPT % */}
+                <th>Needle Runtime %</th>{" "}
+                {/* Moved Needle Runtime % after NPT % */}
                 <th>Sewing Speed</th>
                 <th>Stitch Count</th>
                 <th>Machine Count</th>
@@ -398,7 +490,8 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
               {reportData.tableData.map((row, index) => (
                 <tr key={index}>
                   <td>{row.Date}</td>
-                  <td>{row["Line Number"] || lineNumber}</td> {/* Show Line Number */}
+                  <td>{row["Line Number"] || lineNumber}</td>{" "}
+                  {/* Show Line Number */}
                   <td>{formatHoursMinutes(row["Total Hours"])}</td>
                   <td>{formatHoursMinutes(row["Sewing Hours (PT)"])}</td>
                   <td>{formatHoursMinutes(row["Idle Hours"])}</td>
@@ -409,10 +502,11 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
                   <td>{formatHoursMinutes(row["Needle Break Hours"])}</td>
                   <td>{safeToFixed(row["Productive Time (PT) %"])}%</td>
                   <td>{safeToFixed(row["Non-Productive Time (NPT) %"])}%</td>
-                  <td>{getNeedleRuntimePercentage(row)}%</td> {/* Moved Needle Runtime % after NPT % */}
+                  <td>{safeToFixed(reportData.needleRuntimePercentage)}%</td>{" "}
+                  {/* Moved Needle Runtime % after NPT % */}
                   <td>{safeToFixed(row["Sewing Speed"])}</td>
-                  <td>{row["Stitch Count"] || '0'}</td>
-                  <td>{row["Machine Count"] || '0'}</td>
+                  <td>{row["Stitch Count"] || "0"}</td>
+                  <td>{row["Machine Count"] || "0"}</td>
                 </tr>
               ))}
             </tbody>
@@ -420,25 +514,28 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
         </div>
       </div>
 
-     
-
       <div className="summary-tiles">
         <div className="tile production-percentage">
           <p>{safeToFixed(reportData.totalProductiveTime.percentage)}%</p>
           <span>Productive Time</span>
         </div>
         <div className="tile needle-runtime-percentage">
-          <p>{safeToFixed(
-            reportData.totalNeedleRuntime.percentage || getNeedleRuntimePercentage(firstRow)
-          )}%</p>
+                    <p>
+            {safeToFixed(reportData.needleRuntimePercentage)}%
+          </p>
           <span>Needle Runtime %</span>
         </div>
         <div className="tile sewing-speed">
-          <p>{
-            reportData.tableData.length > 0
-              ? safeToFixed(reportData.tableData.reduce((sum, row) => sum + (row["Sewing Speed"] || 0), 0) / reportData.tableData.length)
-              : '0.00'
-          }</p>
+          <p>
+            {reportData.tableData.length > 0
+              ? safeToFixed(
+                  reportData.tableData.reduce(
+                    (sum, row) => sum + (row["Sewing Speed"] || 0),
+                    0
+                  ) / reportData.tableData.length
+                )
+              : "0.00"}
+          </p>
           <span>Sewing Speed</span>
         </div>
         <div className="tile total-hours">
@@ -449,8 +546,11 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
 
       <div className="chart-breakdown-container">
         <div className="graph-section">
-          <h3>Hours Breakdown (Total: {formatHoursMinutes(reportData.totalHours)} Hrs)</h3>
-          <div style={{ width: '100%', height: '320px' }}>
+          <h3>
+            Hours Breakdown (Total: {formatHoursMinutes(reportData.totalHours)}{" "}
+            Hrs)
+          </h3>
+          <div style={{ width: "100%", height: "320px" }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -467,48 +567,64 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip 
+                <Tooltip
                   formatter={(value, name) => {
                     const hours = Math.floor(value / 60);
                     const minutes = value % 60;
-                    let label = '';
-                    if (hours > 0 && minutes > 0) label = `${hours} hours ${minutes} minutes`;
+                    let label = "";
+                    if (hours > 0 && minutes > 0)
+                      label = `${hours} hours ${minutes} minutes`;
                     else if (hours > 0) label = `${hours} hours`;
                     else label = `${minutes} minutes`;
                     return [label, name];
                   }}
                   labelFormatter={(name) => `${name}`}
                   contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                    fontSize: '14px'
+                    backgroundColor: "#fff",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                    fontSize: "14px",
                   }}
                 />
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="total-hours" style={{ textAlign: 'center', marginTop: '10px' }}>
-            <strong>Total Hours: {formatHoursMinutes(reportData.totalHours)} Hrs</strong>
+          <div
+            className="total-hours"
+            style={{ textAlign: "center", marginTop: "10px" }}
+          >
+            <strong>
+              Total Hours: {formatHoursMinutes(reportData.totalHours)} Hrs
+            </strong>
           </div>
         </div>
 
         <div className="hour-breakdown">
           <div className="hour-box">
             <span className="dot production"></span>
-            <p>{formatHoursMinutes(firstRow["Sewing Hours (PT)"])}: Sewing Hours</p>
+            <p>
+              {formatHoursMinutes(firstRow["Sewing Hours (PT)"])}: Sewing Hours
+            </p>
           </div>
           <div className="hour-box">
             <span className="dot no-feeding"></span>
-            <p>{formatHoursMinutes(firstRow["No Feeding Hours"])}: No Feeding Hours</p>
+            <p>
+              {formatHoursMinutes(firstRow["No Feeding Hours"])}: No Feeding
+              Hours
+            </p>
           </div>
           <div className="hour-box">
             <span className="dot maintenances"></span>
-            <p>{formatHoursMinutes(firstRow["Maintenance Hours"])}: Maintenance Hours</p>
+            <p>
+              {formatHoursMinutes(firstRow["Maintenance Hours"])}: Maintenance
+              Hours
+            </p>
           </div>
           <div className="hour-box">
             <span className="dot meeting"></span>
-            <p>{formatHoursMinutes(firstRow["Meeting Hours"])}: Meeting Hours</p>
+            <p>
+              {formatHoursMinutes(firstRow["Meeting Hours"])}: Meeting Hours
+            </p>
           </div>
           <div className="hour-box">
             <span className="dot idle"></span>
@@ -520,7 +636,10 @@ const LineReport = ({ lineNumber, fromDate, toDate }) => {
           </div>
           <div className="hour-box">
             <span className="dot needle-break"></span>
-            <p>{formatHoursMinutes(firstRow["Needle Break Hours"])}: Needle Break Hours</p>
+            <p>
+              {formatHoursMinutes(firstRow["Needle Break Hours"])}: Needle Break
+              Hours
+            </p>
           </div>
         </div>
       </div>
