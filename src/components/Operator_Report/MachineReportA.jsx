@@ -85,7 +85,7 @@ const MachineReportA = ({ machine_id, fromDate, toDate }) => {
       }
     }
     fetch(
-      `https://oceanatlantic.pinesphere.co.in/api/api/afl/machines/${machine_id}/reports/?${params}`
+      `http://localhost:8000/api/api/afl/machines/${machine_id}/reports/?${params}`
     )
       .then((response) => response.json())
       .then((data) => {

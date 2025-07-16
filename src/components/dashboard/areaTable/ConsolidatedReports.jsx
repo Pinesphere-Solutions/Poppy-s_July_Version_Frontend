@@ -57,7 +57,7 @@ const formatDateTime = (dateTimeString) => {
   }
 };
 
-const API_URL = "https://oceanatlantic.pinesphere.co.in/api/get_consolidated_logs/";
+const API_URL = "http://localhost:8000/api/get_consolidated_logs/";
 
 const ConsolidatedReports = () => {
   const [tableData, setTableData] = useState([]);

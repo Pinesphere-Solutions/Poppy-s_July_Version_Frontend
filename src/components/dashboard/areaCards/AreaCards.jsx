@@ -30,14 +30,14 @@ const AreaCards = () => {
       }
     };
 
-    fetchData("https://oceanatlantic.pinesphere.co.in/api/line_count/", (data) =>
+    fetchData("http://localhost:8000/api/line_count/", (data) =>
       setLineNumberCount(data.line_number_count || 0)
     );
-    fetchData("https://oceanatlantic.pinesphere.co.in/api/machine_count/", (data) =>
+    fetchData("http://localhost:8000/api/machine_count/", (data) =>
       setMachineCount(data.machine_id_count || 0)
     );
 
-    fetchData("https://oceanatlantic.pinesphere.co.in/api/calculate_efficiency/", (data) => {
+    fetchData("http://localhost:8000/api/calculate_efficiency/", (data) => {
       const formattedData = Object.keys(data).map((key) => ({
         line: key,
         efficiency: parseFloat(data[key].Efficiency),
@@ -46,7 +46,7 @@ const AreaCards = () => {
     });
 
     fetchData(
-      "https://oceanatlantic.pinesphere.co.in/api/calculate_operator_efficiency/",
+      "http://localhost:8000/api/calculate_operator_efficiency/",
       (data) => {
         // Group efficiency by operator (sum efficiency of duplicates)
         const groupedData = data.reduce((acc, item) => {
@@ -66,14 +66,14 @@ const AreaCards = () => {
     );
 
     const interval = setInterval(() => {
-      fetchData("https://oceanatlantic.pinesphere.co.in/api/line_count/", (data) =>
+      fetchData("http://localhost:8000/api/line_count/", (data) =>
         setLineNumberCount(data.line_number_count || 0)
       );
-      fetchData("https://oceanatlantic.pinesphere.co.in/api/machine_count/", (data) =>
+      fetchData("http://localhost:8000/api/machine_count/", (data) =>
         setMachineCount(data.machine_id_count || 0)
       );
 
-      fetchData("https://oceanatlantic.pinesphere.co.in/api/calculate_efficiency/", (data) => {
+      fetchData("http://localhost:8000/api/calculate_efficiency/", (data) => {
         const formattedData = Object.keys(data).map((key) => ({
           line: key,
           efficiency: parseFloat(data[key].Efficiency),
@@ -82,7 +82,7 @@ const AreaCards = () => {
       });
 
       fetchData(
-        "https://oceanatlantic.pinesphere.co.in/api/calculate_operator_efficiency/",
+        "http://localhost:8000/api/calculate_operator_efficiency/",
         (data) => {
           const groupedData = data.reduce((acc, item) => {
             acc[item.operator] = (acc[item.operator] || 0) + item.efficiency;
